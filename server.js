@@ -448,6 +448,12 @@ function applyCodexLine(S, o, live, F) {
     return;
   }
   if (o.type === 'event_msg' && pl.type === 'token_count') { codexRate(pl, o.timestamp); return; }
+  if (o.type === 'event_msg' && (pl.type === 'error' || pl.type === 'stream_error')) { // 서버 연결 실패 · 끊김 · 재시도 → 식은땀
+    const m = String(pl.message || pl.error || '');
+    const net = /stream|disconnect|connect|network|timed? ?out|reconnect|retry|5\d\d|overload|unavailable|rate.?limit|429/i.test(m);
+    ev(S, live, { k: 'error', text: (net ? '🔌 서버 연결이 안 돼요 — ' : '') + (snip(m, 60) || '오류') });
+    return;
+  }
   if (o.type === 'event_msg' && (pl.type === 'task_complete' || pl.type === 'turn_aborted')) { ev(S, live, { k: 'wait', since: Date.parse(o.timestamp) || Date.now() }); return; }
   if (o.type === 'event_msg' && pl.type === 'item_completed' && pl.item) {
     const it = pl.item;
