@@ -872,6 +872,18 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/setup' && req.method === 'POST') return handleSetup(req, res);
+  if (url === '/sprites/list') { // 🎨 직접 그린 캐릭터 그림 목록
+    let list = []; try { list = fs.readdirSync(path.join(__dirname, 'sprites')).filter(f => /^[\w-]{1,40}\.(png|gif|webp)$/i.test(f)); } catch { }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify(list));
+  }
+  if (url.startsWith('/sprites/')) {
+    const name = decodeURIComponent(url.slice(9)); const m = name.match(/^[\w-]{1,40}\.(png|gif|webp)$/i);
+    if (!m) { res.writeHead(404); return res.end(); }
+    return fs.readFile(path.join(__dirname, 'sprites', name), (err, buf) => {
+      if (err) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': 'image/' + m[1].toLowerCase(), 'Cache-Control': 'no-cache' }); res.end(buf);
+    });
+  }
   if (url === '/log') { // 업무 일지 다시 채우기: ?k=세션키,세션키
     const keys = (new URL(req.url, 'http://x').searchParams.get('k') || '').split(',').slice(0, 8);
     const list = keys.flatMap(k => (sessions.get(k) || {}).hist || []).sort((a, b) => a.at - b.at).slice(-80);

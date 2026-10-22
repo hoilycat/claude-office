@@ -771,17 +771,23 @@ function drawPerson(a, t) {
   if (L.float) { ellipse(0, 0, 9 + Math.sin(t * 2.2 + a.seed), 3.6, 'rgba(123,92,240,.28)'); ctx.translate(0, -7 - Math.sin(t * 2.2 + a.seed) * 2.2); } // 반중력: 둥둥
   if (a.hopUntil > performance.now()) ctx.translate(0, -Math.abs(Math.sin(t * 9 + a.seed)) * 10); // 월급 받고 방방
   if (a.slump) { ctx.translate(8, 16); ctx.rotate(1.0); } // 월급 주고 책상에 털썩 엎드린 대표님
+  if (a.lie) { ctx.translate(-4, -6); ctx.rotate(-1.35); } // 번아웃 휴가: 휴게실에 드러눕기
   if (!a.avatar && a.x < 1.2) ctx.globalAlpha = Math.max(0, Math.min(1, elevOpen * 1.4, (a.x - .2) * 1.6 + elevOpen));
   if (!L.float) ellipse(0, 0, 10, 4.2, 'rgba(30,35,60,.16)'); // 떠 있는 직원은 바닥 그림자 하나만 (위에서 따로 그림)
+  const spr = spriteFor(a.kind, walk, t); // 🎨 sprites/ 폴더에 직접 그린 그림이 있으면 그걸로
+  let by = -28 - bob, hy = by - 11;
+  const fat = a.avatar ? 0 : fatigueOf(a.kind); // 😪 사용량 피로도 (1: 80%↑, 2: 한도 다 씀)
+  if (spr) {
+    const h = 58, w = spr.width / spr.height * h; ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(spr, -w / 2, -h - bob, w, h); ctx.imageSmoothingEnabled = true; by = -h * .5 - bob; hy = -h * .78 - bob;
+  } else {
   const sw = walk ? Math.sin(ph) * 2.4 : 0;
   rrect(-6, -12 - Math.max(0, sw), 5, 11, 2.5, '#3d4257'); rrect(1, -12 - Math.max(0, -sw), 5, 11, 2.5, '#3d4257');
-  const by = -28 - bob;
   rrect(-11.5, by + 3 + sw * .6, 4.5, 11, 2.2, shade(L.body, -.12), OUT);
   rrect(7, by + 3 - sw * .6, 4.5, 11, 2.2, shade(L.body, -.12), OUT);
   rrect(-8.5, by, 17, 18, 7.5, L.body, OUT);
   if (L.apron) { rrect(-6, by + 5, 12, 13, 3, L.apron, OUT); rrect(-2.5, by + 9, 5, 3, 1, shade(L.apron, -.15)); } // 앞치마
   if (L.mark) { ctx.fillStyle = '#fff'; ctx.font = '700 8px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(L.mark, 0, by + 11); }
-  const hy = by - 11;
   if (L.long) { rrect(-14, hy - 6, 28, 26, 11, L.hair); rrect(-15, hy + 8, 7, 12, 3.5, shade(L.hair, .06)); rrect(8, hy + 8, 7, 12, 3.5, shade(L.hair, .06)); } // 어깨까지 오는 머리
   if (L.skirt) { ctx.beginPath(); ctx.moveTo(-8, by + 14); ctx.lineTo(8, by + 14); ctx.lineTo(10, by + 22); ctx.lineTo(-10, by + 22); ctx.closePath(); ctx.fillStyle = L.skirt; ctx.fill(); }
   if (L.lady) { ctx.beginPath(); ctx.moveTo(-3.5, by + .5); ctx.lineTo(3.5, by + .5); ctx.lineTo(0, by + 7); ctx.closePath(); ctx.fillStyle = '#ffffff'; ctx.fill(); circle(0, by + 9, 1.3, '#ffd34d'); } // 블라우스 깃 · 브로치
@@ -804,6 +810,7 @@ function drawPerson(a, t) {
   else { ellipse(-4.4, hy + 2.2, 1.9, 2.5, '#2b2232'); ellipse(4.4, hy + 2.2, 1.9, 2.5, '#2b2232'); circle(-3.8, hy + 1.3, .7, '#fff'); circle(5, hy + 1.3, .7, '#fff'); }
   if (L.lady && !blink) { ctx.strokeStyle = '#2b2232'; ctx.lineWidth = 1; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-6.4, hy + .6); ctx.lineTo(-7.6, hy - .4); ctx.moveTo(6.4, hy + .6); ctx.lineTo(7.6, hy - .4); ctx.stroke(); } // 속눈썹
   ellipse(-7.4, hy + 6, 2.3, 1.4, L.lady ? 'rgba(255,110,140,.55)' : 'rgba(255,128,128,.45)'); ellipse(7.4, hy + 6, 2.3, 1.4, L.lady ? 'rgba(255,110,140,.55)' : 'rgba(255,128,128,.45)');
+  if (fat) { ctx.strokeStyle = fat > 1 ? 'rgba(90,60,150,.7)' : 'rgba(110,80,160,.5)'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.arc(-4.4, hy + 3.4, 2.3, .15 * Math.PI, .85 * Math.PI); ctx.moveTo(6.7, hy + 3.4); ctx.arc(4.4, hy + 3.4, 2.3, .15 * Math.PI, .85 * Math.PI); ctx.stroke(); } // 다크서클
   const gr = a.avatar || a.paidHappy ? 0 : grumpOf(a.kind); // 월급날 지나도 안 주면 찡그림 (1: 당일~2일, 2: 3일 넘게 체불)
   ctx.strokeStyle = L.lady ? '#d9466a' : '#7a4b38'; ctx.lineWidth = L.lady ? 1.6 : 1.2; ctx.lineCap = 'round'; ctx.beginPath();
   if (a.mood === 'think') { ctx.moveTo(-1.6, hy + 7); ctx.lineTo(1.6, hy + 7); ctx.stroke(); rrect(6, hy + 5, 5.5, 5.5, 2.6, '#ffd9ba', OUT); }
@@ -817,9 +824,12 @@ function drawPerson(a, t) {
   }
   if (L.glasses) { ctx.strokeStyle = '#2b2232'; ctx.lineWidth = 1.1; ctx.beginPath(); ctx.arc(-4.4, hy + 2.2, 3.7, 0, 7); ctx.moveTo(8.1, hy + 2.2); ctx.arc(4.4, hy + 2.2, 3.7, 0, 7); ctx.moveTo(-.7, hy + 2.2); ctx.lineTo(.7, hy + 2.2); ctx.stroke(); }
   if (a.mood === 'sweat') { ctx.beginPath(); const dx = 13, dy = hy - 6 + ((t * 20) % 6); ctx.moveTo(dx, dy - 4); ctx.quadraticCurveTo(dx + 3.5, dy + 1, dx, dy + 2.5); ctx.quadraticCurveTo(dx - 3.5, dy + 1, dx, dy - 4); ctx.fillStyle = '#6cb6ff'; ctx.fill(); }
+  } // ← 직접 그린 그림이 없을 때만 그리는 몸·얼굴 끝
+  if (fat && !a.avatar && (a.lie || !a.walking)) { ctx.font = '700 8px Jua,sans-serif'; ctx.fillStyle = 'rgba(90,70,150,.85)'; ctx.textAlign = 'center'; for (let i = 0; i < 3; i++) { const k = ((t * .6 + i / 3 + a.seed) % 1); ctx.globalAlpha = 1 - k; ctx.font = `700 ${7 + i * 2}px Jua,sans-serif`; ctx.fillText('z', 12 + k * 8 + i * 2, hy - 6 - k * 16); } ctx.globalAlpha = 1; } // Zzz
   if (a.badge === 'phone') rrect(-16, by - 1, 6, 10, 2, '#2b2f3a');
-  if (a.badge === 'coffee') { rrect(9, by + 5, 7, 7, 1.5, '#ffffff', OUT); rrect(9.5, by + 5.5, 6, 2, 1, '#9a6a45'); }
-  const pk = !a.avatar && !a.paidHappy && picketOf(a.kind); // 🪧 월급 시위
+  if (a.badge === 'coffee' && fridayNight()) { rrect(9, by + 3, 7, 9, 1.5, '#ffc93c', OUT); rrect(8.6, by + 1.5, 7.8, 3, 1.5, '#ffffff'); rrect(15.5, by + 5, 2.5, 4.5, 1.2, 'rgba(0,0,0,0)', OUT); } // 🍻 불금엔 맥주
+  else if (a.badge === 'coffee') { rrect(9, by + 5, 7, 7, 1.5, '#ffffff', OUT); rrect(9.5, by + 5.5, 6, 2, 1, '#9a6a45'); }
+  const pk = !a.avatar && !a.paidHappy && (picketOf(a.kind) || (overtimeNow() && a.badge !== 'coffee' && !a.lie && a.lastWork && Date.now() - a.lastWork < 10 * 60e3 ? '야근 수당 주세요 🌙' : '') || (a.lie ? '🏖️ 번아웃 휴가' : '')); // 🪧 월급 · 야근 · 번아웃
   if (pk) {
     ctx.save(); ctx.translate(11, by + 10); ctx.rotate(Math.sin(t * 4 + a.seed) * .12);
     ctx.strokeStyle = '#8a6444'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -46); ctx.stroke();
@@ -1105,6 +1115,7 @@ function onEv(e) {
   if (!scene) return;
   const W = scene.workers.get(e.session);
   if (!W) { pingFloor(e.session); return; }
+  if (/^(tool|think|user|say)$/.test(e.k)) W.actor.lastWork = Date.now(); // 🌙 야근 판정용
 
   const c = W.actor;
   weatherOn(e);
@@ -1146,6 +1157,8 @@ setInterval(() => {
     const c = W.actor, idle = Date.now() - W.lastEv, home = spotFor(idle > 120e3 ? 'rest' : 'desk', null, W); // 2분 넘게 쉬면 휴게실로
     if (idle > 25e3 && !c.walking && Math.hypot(c.x - home.x, c.y - home.y) > .3) { c.mood = ''; c.goto(home); }
     if (idle > 120e3 && c.badge !== 'coffee') { c.badge = 'coffee'; c.mood = ''; }
+    c.lie = idle > 120e3 && !c.walking && fatigueOf(W.kind) === 2; // 한도 다 쓰고 쉬는 중이면 휴게실에 드러누움
+    if (c.lie && c.badge === 'coffee') c.badge = '';
   }
   renderCrew();
 }, 1000);
@@ -1184,7 +1197,7 @@ function renderCrew() {
   const ws = [...scene.workers.values()].sort((a, b) => (b.key === scene.primary) - (a.key === scene.primary));
   for (const W of ws) {
     const [sc, st] = workerStatus(W);
-    h += `<div class="cr ${W.kind}" data-w="${esc(W.key)}"><img src="${avatar(W.kind)}" alt=""><div class="m"><div class="r1"><b>${esc(workerName(W))}</b><span class="st ${sc}">${st}</span>${goBtn(W.key, workerName(W))}</div>
+    h += `<div class="cr ${W.kind}" data-w="${esc(W.key)}"><img src="${avatar(W.kind)}" alt=""><div class="m"><div class="r1"><b>${esc(workerName(W))}</b><span class="st ${sc}">${st}</span><button class="go" data-praise="${esc(W.key)}" title="${esc(workerName(W))} 칭찬하기" aria-label="${esc(workerName(W))} 칭찬하기">👍</button>${goBtn(W.key, workerName(W))}</div>
       <div class="r2">${esc(W.lastTool || '개발실 자기 자리')}</div><div class="r3">도구 ${W.tools}회 · ${ago(W.started)}째 근무${W.seat ? ' · 빈 책상 ' + ({ dev: '개발실', web: '정보검색실', library: '자료실' }[W.seat.room] || '') : ''}${W.key !== scene.primary ? ' · 같은 층 다른 세션' : ''}</div></div></div>`;
     for (const [id, A] of W.agents) {
       const s = A.leaving ? ['report', '보고 중'] : A.actor.mood === 'sweat' ? ['sweat', '진땀'] : A.arriving ? ['rest', '출근 중'] : ['work', '일하는 중'];
@@ -1195,6 +1208,7 @@ function renderCrew() {
   $('#crew').innerHTML = h;
 }
 $('#crew').addEventListener('click', (ev) => {
+  const pr = ev.target.closest('[data-praise]'); if (pr) { ev.stopPropagation(); const W = scene && scene.workers.get(pr.dataset.praise); if (W) praise(W); return; }
   const pb = ev.target.closest('[data-pay]'); if (pb) { ev.stopPropagation(); payCeremony([pb.dataset.pay]); return; }
   const op = ev.target.closest('[data-open]'); if (op) { ev.stopPropagation(); openApp(op.dataset.open); return; }
   const lt = ev.target.closest('[data-ltab]'); if (lt) { lobbyTab = lt.dataset.ltab; showLobby(true); return; }
@@ -1607,6 +1621,7 @@ $('#setup').addEventListener('submit', async (e) => {
 $('#setupBg').addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#suX')) closeSetup(); });
 $('#setupBtn').onclick = () => openSetup(false);
 $('#payBtn').onclick = () => openPay();
+setTimeout(() => { if (fridayNight()) setTimeout(() => toast('🍻 불금이에요! 쉬는 직원들은 휴게실에서 회식 중'), 3200); }, 0);
 setTimeout(() => { const d = payDue(); if (d.length) toast(`💸 오늘은 ${d.map(k => staff(k)).join(' · ')} 월급날! 대표실에서 지급해 주세요 🪧`); }, 2500);
 $('#tidy').addEventListener('change', (e) => { if (payMode) payInput(e); });
 $('#tidy').addEventListener('input', (e) => { if (payMode && e.target.dataset.payAmt) payInput(e); });
@@ -1684,6 +1699,7 @@ function frame(now) {
     for (const a of actors) if (!a.away) list.push({ k: a.x + a.y, draw: () => drawPerson(a, t) });
     list.sort((a, b) => a.k - b.k).forEach(d => d.draw());
     if (isNight()) drawNight(t);
+    drawPayFx();
     drawWeather(t, dt);
   }
   actors.forEach(a => a.place()); ceoActors.forEach(a => a.place()); lobbyActors.forEach(a => a.place()); roofActors.forEach(a => a.place()); placeSigns();
@@ -1936,6 +1952,43 @@ function syncCeo() {
     a.setName(staff(kindOf(x.s), x.f.proj), fno(x.f.n));
   });
 }
+// ───────── 😪 피로도 · 🌙 야근 · 🍻 불금 · 👍 칭찬 · 🎨 직접 그린 그림 ─────────
+function fatigueOf(kind) { // 사용량(5시간 · 주간 한도) → 0 · 1(80%↑) · 2(100% 한도 다 씀)
+  const u = RAW && RAW.usage, x = u && (kind === 'claude' ? u.claude : kind === 'codex' ? u.codex : null); if (!x) return 0;
+  const p = Math.max((x.five_hour || {}).used || 0, (x.seven_day || {}).used || 0);
+  return p >= 100 ? 2 : p >= 80 ? 1 : 0;
+}
+const overtimeNow = () => { const h = new Date().getHours(); return h >= 22 || h < 6; };
+const fridayNight = () => { const d = new Date(); return d.getDay() === 5 && d.getHours() >= 18; };
+const SPRITES = {}; // 이름 → Image (sprites/claude.png, claude-walk.png, codex.png, agy.png, me.png …)
+function spriteFor(kind, walk, t) {
+  const base = SPRITES[kind]; if (!base) return null;
+  const w = walk && SPRITES[kind + '-walk']; return w && Math.floor(t * 6) % 2 ? w : base;
+}
+fetch('/sprites/list').then(r => r.ok ? r.json() : []).then(list => {
+  let n = 0;
+  for (const f of list) { const im = new Image(); im.onload = () => { SPRITES[f.replace(/\.(png|gif|webp)$/i, '')] = im; if (++n === list.length) { for (const k in AVATAR) delete AVATAR[k]; renderCrew(); } }; im.onerror = () => { if (++n === list.length) renderCrew(); }; im.src = 'sprites/' + encodeURIComponent(f); }
+}).catch(() => { });
+const PRAISE = ['헤헤 감사합니다 💕', '대표님 최고! ✨', '더 열심히 할게요! 💪', '칭찬은 고래도 춤추게 해요 🐳', '오늘 일할 맛 난다~ 🎵'];
+function praise(W) {
+  const a = W.actor; a.hopUntil = performance.now() + 1600;
+  a.say('report', '칭찬 받음!', PRAISE[Math.floor(Math.random() * PRAISE.length)], 2600);
+  const now = performance.now();
+  payFx.push({ kind: 'text', text: '+10 행복 💖', color: '#e2568a', a: [a.x, a.y, 100], t0: now, dur: 2200 });
+  for (let i = 0; i < 6; i++) payFx.push({ kind: 'text', text: ['💖', '💕', '✨'][i % 3], color: '#e2568a', a: [a.x + (Math.random() - .5) * .9, a.y + (Math.random() - .5) * .6, 60 + Math.random() * 20], t0: now + i * 120, dur: 1500 });
+}
+// 불금 · 번아웃 · 야근 혼잣말
+setInterval(() => {
+  if (view !== 'office' || !scene) return;
+  for (const W of scene.workers.values()) {
+    const a = W.actor; if (a.walking || Math.random() > .3) continue;
+    if (a.lie) a.say('', '', ['…zzZ 한도가… 다 떨어졌어요…', '번아웃 휴가 중입니다 🏖️', '5시간만… 쉬고 올게요…'][Math.floor(Math.random() * 3)], 2600);
+    else if (a.badge === 'coffee' && fridayNight()) a.say('', '', ['불금이다! 🍻', '대표님 회식 법카 주세요 💳', '오늘은 커밋 안 해요 🙅'][Math.floor(Math.random() * 3)], 2600);
+    else if (fatigueOf(W.kind) === 1) a.say('', '', ['하암… 😪', '커피 한 잔만 더…', '사용량이 80% 넘었어요…'][Math.floor(Math.random() * 3)], 2400);
+  }
+}, 30e3);
+let fridayToast = false;
+
 // ───────── 💸 월급날 ─────────  (실제 결제와는 연결 안 함. 날짜·금액은 이 브라우저에만 저장, 금액은 그냥 표시용)
 const PAY_KINDS = ['claude', 'codex', 'agy'];
 const PAY_LINES = { claude: '대표님! 이번 달도 잘 부탁드립니다! 🧡', codex: '급여 지급 확인. 다음 작업을 기다립니다.', agy: '월급 들어오니까 몸이 더 가벼워졌어요… 🛸✨' };
