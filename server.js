@@ -6,7 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 
 const PORT = +process.env.PORT || 4777;
 const ROOT = process.env.CLAUDE_PROJECTS_DIR || path.join(os.homedir(), '.claude', 'projects');
@@ -499,7 +499,7 @@ function trackCodex(fp) {
   const id = meta.id || fid; if (!id) return;
   let S, child = null;
   if (meta.parent_thread_id) { S = getSession('codex', meta.parent_thread_id); if (!S.agent || S.agent === 'claude') { S.agent = 'codex'; if (!S.cwd) S.main = false; } child = { id, type: codexSubType(meta), n: 0, active: false }; codexKids.push([S, child]); }
-  else { S = getSession('codex', id); S.agent = 'codex'; S.main = true; if (meta.cwd) S.cwd = meta.cwd; if (meta.timestamp) S.started = Date.parse(meta.timestamp) || 0; }
+  else { S = getSession('codex', id); S.agent = 'codex'; S.main = true; S.originator = String(meta.originator || (meta.source && typeof meta.source === 'string' ? meta.source : '') || ''); if (meta.cwd) S.cwd = meta.cwd; if (meta.timestamp) S.started = Date.parse(meta.timestamp) || 0; }
   S.mtime = Math.max(S.mtime, st.mtimeMs);
   F = { fp, key: S.key, codex: true, child, offset: 0, rem: '', mtime: st.mtimeMs };
   if (!child && Date.now() - st.mtimeMs < 8 * 864e5) { try { codexRateBoot(fp, st.size); } catch { } }
@@ -564,13 +564,14 @@ function usageNow() {
 // Claude Code 는 실행 중인 세션마다 ~/.claude/sessions/<pid>.json 을 두고, 끄면 지움. (.key 파일은 열지 않음)
 // 이걸로 '터미널을 닫은 세션'은 답변 대기에서 뺌. 폴더가 없는 옛 버전이면 null → 거르지 않음
 const LIVE_DIR = path.join(path.dirname(ROOT), 'sessions');
+const claudePid = new Map(); // Claude 세션 → 프로세스 번호 (앱으로 가기에 씀)
 function liveClaude() {
   let names; try { names = fs.readdirSync(LIVE_DIR).filter(n => /^\d+\.json$/.test(n)); } catch { return null; }
   const live = new Set();
   for (const n of names) {
     try {
       const o = JSON.parse(fs.readFileSync(path.join(LIVE_DIR, n), 'utf8'));
-      if (o.sessionId && o.pid) { process.kill(o.pid, 0); live.add(o.sessionId); } // 프로세스가 진짜 살아 있을 때만
+      if (o.sessionId && o.pid) { process.kill(o.pid, 0); live.add(o.sessionId); claudePid.set(o.sessionId, o.pid); } // 프로세스가 진짜 살아 있을 때만
     } catch { }
   }
   return live;
@@ -739,6 +740,7 @@ function handleGemini(d, evName) {
   sendSnapshot();
 }
 function receiveAgy(req, res, evName, handler = handleAgy) {
+  const hookPid = parseInt(req.headers['x-hook-ppid'], 10) || 0; // 훅을 부른 프로그램(Antigravity·agy·gemini)의 프로세스 번호
   // 이 컴퓨터 안의 훅만 받음 (브라우저에서 다른 사이트가 보내는 건 Origin 이 붙어서 막힘)
   const host = req.headers.host || '';
   if (req.headers.origin || !/^(localhost|127\.0\.0\.1):\d+$/.test(host)) { res.writeHead(403); return res.end(); }
@@ -747,7 +749,57 @@ function receiveAgy(req, res, evName, handler = handleAgy) {
   req.on('end', () => {
     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{}');
     if (big) return;
-    try { handler(JSON.parse(body || '{}'), evName); } catch { }
+    try { const d = JSON.parse(body || '{}'); handler(d, evName); const sid = String(d.conversationId || d.conversation_id || d.session_id || '').slice(0, 80); const S = sid && sessions.get((handler === handleGemini ? 'gemini/' : 'agy/') + sid); if (S && hookPid > 1) S.hookPid = hookPid; } catch { }
+  });
+}
+// ───────── 직원을 누르면 그 직원이 일하는 앱으로 (Mac 전용, POST /open) ─────────
+// 정해진 방식으로만 실행: 'open -a <앱>' (셸 없이 execFile). 앱은 ① 프로세스 족보를 거슬러 올라가 찾은 .app ② office.json 의 apps 설정 ③ 기본값.
+const psLine = (pid) => new Promise(r => execFile('ps', ['-o', 'ppid=,comm=', '-p', String(pid)], { timeout: 1500 }, (e, out) => {
+  const m = !e && String(out).trim().match(/^(\d+)\s+(.+)$/); r(m ? { ppid: +m[1], comm: m[2] } : null);
+}));
+async function appOfPid(pid) { // 부모를 따라 올라가며 처음 만나는 .app (터미널 · Antigravity · VS Code …)
+  for (let i = 0; i < 20 && pid > 1; i++) {
+    const L = await psLine(pid); if (!L) return '';
+    const m = L.comm.match(/^(.*?\.app)\//); if (m && fs.existsSync(m[1])) return m[1];
+    pid = L.ppid;
+  }
+  return '';
+}
+const appName = (x) => typeof x === 'string' && /^[\w .()&+-]{1,60}$/.test(x) ? x : '';
+async function appFor(S) {
+  const apps = (readConf().apps) || {};
+  const term = appName(apps.terminal) || 'Terminal';
+  if (S.agent === 'claude') { liveClaude(); const pid = claudePid.get(S.sid); return (pid && await appOfPid(pid)) || appName(apps.claude) || term; }
+  if (S.agent === 'agy') {
+    const found = S.hookPid && await appOfPid(S.hookPid); if (found) return found;
+    if (S.src === 'gemini') return appName(apps.gemini) || term;
+    return appName(apps.antigravity) || 'Antigravity';
+  }
+  if (S.agent === 'codex') {
+    const o = S.originator || '';
+    if (/vscode/i.test(o)) return appName(apps.vscode) || 'Visual Studio Code'; // VS Code 확장
+    if (/desktop|app/i.test(o) && !/cli|exec/i.test(o)) return appName(apps.codex) || 'Codex'; // Codex 앱
+    return appName(apps.codexCli) || term;
+  }
+  return term;
+}
+function handleOpen(req, res) {
+  const origin = req.headers.origin || '', host = req.headers.host || '';
+  if ((origin && origin !== `http://${host}`) || !/^(localhost|127\.0\.0\.1):\d+$/.test(host) || !/json/.test(req.headers['content-type'] || '')) { res.writeHead(403); return res.end(); }
+  let body = '';
+  req.on('data', (c) => { body += c; if (body.length > 2048) req.destroy(); });
+  req.on('end', async () => {
+    const out = { ok: false };
+    try {
+      const { key } = JSON.parse(body || '{}'); const S = sessions.get(String(key || ''));
+      if (!S) out.msg = '그 직원을 못 찾았어요';
+      else if (process.platform !== 'darwin') out.msg = 'Mac 에서만 돼요';
+      else {
+        const app = await appFor(S); out.app = path.basename(app).replace(/\.app$/, '');
+        await new Promise((r) => execFile('open', ['-a', app], { timeout: 5000 }, (e) => { if (e) out.msg = `'${out.app}' 앱을 못 열었어요`; else out.ok = true; r(); }));
+      }
+    } catch (e) { out.msg = '요청을 못 읽었어요'; }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(out));
   });
 }
 function snapshot() {
@@ -810,6 +862,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/setup' && req.method === 'POST') return handleSetup(req, res);
+  if (url === '/open' && req.method === 'POST') return handleOpen(req, res);
   if (url === '/gemini' && req.method === 'POST') return receiveAgy(req, res, (new URL(req.url, 'http://x').searchParams.get('e') || '').slice(0, 30), handleGemini);
   if (url === '/agy' && req.method === 'POST') return receiveAgy(req, res, (new URL(req.url, 'http://x').searchParams.get('e') || '').slice(0, 30));
   if (url === '/' || url === '/index.html') {

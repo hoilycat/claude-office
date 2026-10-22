@@ -202,6 +202,19 @@ Node.js가 설치되지 않았거나, 설치 후 터미널을 새로 열지 않�
 - 이달의 직원 · 출퇴근 기록부 같은 통계에는 그대로 들어가요
 - 영영 안 보고 싶은 층은 ⋯ → **이 층 숨기기**
 
+### 직원 누르면 그 앱으로 ↗ (Mac)
+
+사무실에서 **직원을 톡 누르거나**(커서가 손가락으로 바뀌어요) 근무표 · 결재함 카드의 **↗** 를 누르면, 그 직원이 일하는 앱이 앞으로 와요.
+- **Claude**: `claude` 를 실행한 터미널 앱 (iTerm · Terminal · Warp · Ghostty · VS Code … 프로세스 족보를 거슬러 올라가 자동으로 찾아요)
+- **Codex**: Codex 앱, VS Code 확장이면 VS Code, CLI 면 터미널
+- **Antigravity / Gemini CLI**: 훅을 부른 프로그램(Antigravity 앱, 또는 `agy` · `gemini` 를 띄운 터미널). 훅을 새로 설치(`node install-agy.js`)해야 정확해져요
+- 앱 단위로 앞으로 불러와요 (그 안의 탭까지 고르진 않아요)
+- 자동으로 못 찾으면 `office.json` 에 직접 적을 수 있어요:
+  ```json
+  { "building": "…", "user": "…", "apps": { "terminal": "iTerm", "claude": "Warp", "codex": "Codex", "antigravity": "Antigravity", "gemini": "iTerm" } }
+  ```
+- 안전: 서버는 `open -a <앱 이름>` 하나만 셸 없이 실행하고, 이 페이지에서 온 요청만 받아요
+
 ### 층 나누기: 폴더별 / 직원별
 
 건물 아래 **🏢 층 나누기 [폴더별 ▾]** 에서 고를 수 있어요.

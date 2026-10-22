@@ -27,7 +27,7 @@ process.stdin.on('end', () => {
   try {
     const req = http.request({
       host: '127.0.0.1', port: PORT, method: 'POST', path: `/${SRC}?e=` + encodeURIComponent(evName),
-      headers: { 'Content-Type': 'application/json' }, timeout: 800,
+      headers: { 'Content-Type': 'application/json', 'X-Hook-PPid': String(process.ppid) }, timeout: 800, // 부모 번호: 직원 누르면 그 앱으로 가기용
     }, (res) => { note(`[${SRC}] ${evName} → 서버 응답 ${res.statusCode}`); res.resume(); res.on('end', finish); });
     req.on('error', (e) => { note(`[${SRC}] ${evName} → 서버 연결 실패 (${e.code || e.message}) — node server.js 가 켜져 있나요?`); finish(); }); req.on('timeout', () => { req.destroy(); finish(); });
     req.end(raw);

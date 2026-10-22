@@ -274,6 +274,10 @@ body.priv :is(.fl:not(.rf):not(.lobby) b,#tname,#mproj,#msess,.al b,.al p,.bub,.
 .cr img{width:44px;height:44px;border-radius:12px;background:#f1f2f9;flex:none}
 .cr .m{min-width:0;flex:1}
 .cr .r1{display:flex;align-items:center;gap:6px}
+.cr .go{flex:none;border:0;background:#eef0fa;color:#3d4291;border-radius:7px;width:22px;height:20px;font-size:12px;line-height:20px;padding:0;cursor:pointer}
+.cr .go:hover{background:#3d4291;color:#fff}
+#toast{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);background:rgba(40,42,70,.92);color:#fff;font-size:13px;padding:8px 14px;border-radius:999px;pointer-events:none;opacity:0;transition:opacity .25s;z-index:30;white-space:nowrap}
+#toast.on{opacity:1}
 .cr .r1 b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .r2{font-size:11.5px;color:#565b74;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .cr .r3{font-size:11px;color:var(--faint);margin-top:1px}
@@ -438,11 +442,29 @@ function fitView() {
 }
 function zoomAt(f, sx, sy) { const nz = Math.max(.35, Math.min(3, cam.z * f)); f = nz / cam.z; cam.x = sx - (sx - cam.x) * f; cam.y = sy - (sy - cam.y) * f; cam.z = nz; }
 new ResizeObserver(resize).observe(center);
+// 화면 좌표 → 그 자리에 서 있는 직원 (서브에이전트 말고 본인만)
+function pickWorker(e) {
+  if (!scene) return null;
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, z = cam.z;
+  let best = null, bd = 1e9;
+  for (const W of scene.workers.values()) {
+    const a = W.actor; if (a.away) continue;
+    const [sx, sy] = toScreen(a.x, a.y);
+    if (Math.abs(mx - sx) < 18 * z && my < sy + 8 * z && my > sy - 80 * z) { const d = Math.abs(mx - sx) + Math.abs(my - (sy - 35 * z)); if (d < bd) { bd = d; best = W; } }
+  }
+  return best;
+}
 {
   let drag = null;
   cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y }; cv.setPointerCapture(e.pointerId); cv.classList.add('drag'); closePop(); });
-  cv.addEventListener('pointermove', e => { if (drag) { cam.x = drag.cx + e.clientX - drag.x; cam.y = drag.cy + e.clientY - drag.y; } });
-  const up = () => { drag = null; cv.classList.remove('drag'); };
+  cv.addEventListener('pointermove', e => { if (!drag) cv.style.cursor = view === 'office' && pickWorker(e) ? 'pointer' : ''; if (drag) { cam.x = drag.cx + e.clientX - drag.x; cam.y = drag.cy + e.clientY - drag.y; } });
+  const up = (e) => {
+    const moved = drag && e && e.clientX != null ? Math.hypot(e.clientX - drag.x, e.clientY - drag.y) : 99;
+    drag = null; cv.classList.remove('drag');
+    if (moved < 5 && e.type === 'pointerup' && view === 'office' && scene) { // 끌지 않고 톡 누름 → 누른 직원의 앱으로
+      const best = pickWorker(e); if (best) openApp(best.key);
+    }
+  };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', e => { e.preventDefault(); const r = cv.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * .0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
   cv.addEventListener('dblclick', fitView);
@@ -1083,6 +1105,18 @@ function workerStatus(W) {
   if (idle > 25e3) return ['rest', '자리에서 대기'];
   return ['work', '일하는 중'];
 }
+// ↗ 직원이 일하는 앱(터미널 · Codex · Antigravity …)으로 가기 — 서버가 Mac 에서 그 앱을 앞으로 불러옴
+const goBtn = (key, who) => `<button class="go" data-open="${esc(key)}" title="${esc(who)} 일하는 앱으로 가기" aria-label="${esc(who)} 일하는 앱으로 가기">↗</button>`;
+let toastT = 0;
+function toast(msg) { let t = $('#toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; center.appendChild(t); } t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+async function openApp(key) {
+  const s = allSessions().find(x => x.key === key), who = s ? staff(kindOf(s), s.floor.proj) : '직원';
+  toast(`↗ ${who} 찾으러 가는 중…`);
+  try {
+    const r = await fetch('/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) }).then(r => r.json());
+    toast(r.ok ? `↗ ${r.app} 열었어요` : `😢 ${r.msg || '앱을 못 열었어요'}`);
+  } catch { toast('😢 서버에 연결할 수 없어요'); }
+}
 function renderCrew() {
   if (view === 'ceo') return renderCeoCrew();
   if (view === 'lobby') return renderLobbyCrew();
@@ -1092,7 +1126,7 @@ function renderCrew() {
   const ws = [...scene.workers.values()].sort((a, b) => (b.key === scene.primary) - (a.key === scene.primary));
   for (const W of ws) {
     const [sc, st] = workerStatus(W);
-    h += `<div class="cr ${W.kind}" data-w="${esc(W.key)}"><img src="${avatar(W.kind)}" alt=""><div class="m"><div class="r1"><b>${esc(staff(W.kind))}</b><span class="st ${sc}">${st}</span></div>
+    h += `<div class="cr ${W.kind}" data-w="${esc(W.key)}"><img src="${avatar(W.kind)}" alt=""><div class="m"><div class="r1"><b>${esc(staff(W.kind))}</b><span class="st ${sc}">${st}</span>${goBtn(W.key, staff(W.kind))}</div>
       <div class="r2">${esc(W.lastTool || '개발실 자기 자리')}</div><div class="r3">도구 ${W.tools}회 · ${ago(W.started)}째 근무${W.key !== scene.primary ? ' · 같은 층 다른 세션' : ''}</div></div></div>`;
     for (const [id, A] of W.agents) {
       const s = A.leaving ? ['report', '보고 중'] : A.actor.mood === 'sweat' ? ['sweat', '진땀'] : A.arriving ? ['rest', '출근 중'] : ['work', '일하는 중'];
@@ -1103,6 +1137,7 @@ function renderCrew() {
   $('#crew').innerHTML = h;
 }
 $('#crew').addEventListener('click', (ev) => {
+  const op = ev.target.closest('[data-open]'); if (op) { ev.stopPropagation(); openApp(op.dataset.open); return; }
   const lt = ev.target.closest('[data-ltab]'); if (lt) { lobbyTab = lt.dataset.ltab; showLobby(true); return; }
   const g = ev.target.closest('[data-goto]'); if (g) { setView('office'); setFollow(false); if (g.dataset.goto !== curKey) switchTo(g.dataset.goto); return; }
   const row = ev.target.closest('.cr'); if (!row || !scene) return;
@@ -1821,7 +1856,7 @@ function syncCeo() {
 function renderCeoCrew() {
   const list = ceoWaiting();
   $('#crew').innerHTML = list.length ? list.map(({ f, s, kind, text }) => `<div class="cr ${kindOf(s)}" data-goto="${esc(s.key)}" style="cursor:pointer"><img src="${avatar(kindOf(s))}" alt=""><div class="m">
-      <div class="r1"><b>${esc(staff(kindOf(s), f.proj))}</b><span class="st ${kind === 'err' ? 'sweat' : 'think'}">${kind === 'ask' ? '🙋 질문' : kind === 'err' ? '⚠ 에러' : '💬 답변 대기'}</span></div>
+      <div class="r1"><b>${esc(staff(kindOf(s), f.proj))}</b><span class="st ${kind === 'err' ? 'sweat' : 'think'}">${kind === 'ask' ? '🙋 질문' : kind === 'err' ? '⚠ 에러' : '💬 답변 대기'}</span>${goBtn(s.key, staff(kindOf(s), f.proj))}</div>
       <div class="r2">${esc(text || '')}</div><div class="r3">${fno(f.n)} ${esc(f.name)}${s.waiting ? ' · ' + agoTxt(s.waiting) + '부터' : ''} · 누르면 그 층으로</div></div></div>`).join('')
     : `<div class="cr"><img src="${avatar('me')}" alt=""><div class="m"><div class="r1"><b>결재함이 비었어요</b></div><div class="r2">다들 열심히 일하는 중 ☕</div></div></div>`;
 }
