@@ -145,6 +145,8 @@ button{font:inherit;color:inherit}
 #recent{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2px 4px;margin-top:4px;font-size:11.5px;color:var(--sub);padding:4px;white-space:nowrap}
 #recent select{font:inherit;font-size:12px;border:1px solid var(--line,#dfe2ef);border-radius:7px;padding:2px 4px;background:#fff;color:var(--ink)}
 #recent b{flex-basis:100%;text-align:center;font-weight:500;color:var(--sub)}#recent b:empty{display:none}
+#group{flex:none;display:flex;align-items:center;justify-content:center;gap:4px;font-size:11.5px;color:var(--sub);padding:2px 4px 6px;white-space:nowrap}
+#group select{font:inherit;font-size:12px;border:1px solid var(--line,#dfe2ef);border-radius:7px;padding:2px 4px;background:#fff;color:var(--ink)}
 /* ── 층 정리 창 ── */
 /* 처음 설정 창 */
 #setupBg{position:fixed;inset:0;background:rgba(38,42,63,.38);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
@@ -337,6 +339,7 @@ body.priv :is(.fl:not(.rf):not(.lobby) b,#tname,#mproj,#msess,.al b,.al p,.bub,.
     <div id="base"></div>
     <button id="unhide" hidden></button>
     <label id="recent" title="오래 쉰 층은 접어 둬요. 다시 일하면 저절로 나타나요">🗓 <select id="recentSel" aria-label="최근 며칠 안에 일한 층만 보기"><option value="1">오늘</option><option value="3">3일</option><option value="7">7일</option><option value="30">30일</option><option value="0">전부</option></select><span>안에 일한 층만 보기</span><b id="recentN"></b></label>
+    <label id="group" title="층을 작업 폴더로 나눌지, 직원(Claude · Codex · Antigravity)으로 나눌지">🏢 층 나누기 <select id="groupSel" aria-label="층 나누는 방법"><option value="folder">폴더별</option><option value="agent">직원별</option></select></label>
   </aside>
   <div id="setupBg"><form id="setup" role="dialog" aria-modal="true" aria-labelledby="setupH" autocomplete="off"></form></div>
   <div id="tidyBg"><div id="tidy" role="dialog" aria-modal="true" aria-labelledby="tidyH"></div></div>
@@ -1143,12 +1146,17 @@ const saveLayout = () => { try { localStorage.setItem('office.layout', JSON.stri
 const rootOf = (k) => { const seen = new Set(); while (layout.merge[k] && !seen.has(k)) { seen.add(k); k = layout.merge[k]; } return k; };
 let RAW = null, ALL = [], hiddenN = 0, staleN = 0;
 let recentDays = +load('office.recentDays', 7); // 0 = 전부 보기
+let groupBy = load('office.groupBy', 'folder') === 'agent' ? 'agent' : 'folder'; // 층 = 작업 폴더 | 직원 종류
+const AGENT_ORDER = ['claude', 'codex', 'agy'];
 const isStale = (F) => recentDays > 0 && !F.active && Date.now() - F.mtime > recentDays * 864e5 && F.proj !== rootOf(RAW.self || '') && !F.sessions.some(s => s.key === curKey);
 const homeOf = new Map(); // 세션 → 원래(합치기까지 반영한) 층
 function applySnap() { // 정리 규칙대로 층을 다시 묶고, 숨긴 층을 빼고, 층 번호를 다시 매김
   const orig = new Map(RAW.floors.map(f => [f.proj, f.name])), G = new Map();
   const g = (k) => G.get(k) || G.set(k, { proj: k, orig: orig.get(k) || '', parts: [], total: 0, sessions: [] }).get(k);
   homeOf.clear();
+  if (groupBy === 'agent') { // 직원별 층: 같은 종류 직원의 세션을 한 층에 (폴더 합치기·옮기기는 폴더별일 때만)
+    for (const f of RAW.floors) for (const s of f.sessions) { const k = 'agent:' + kindOf(s), H = g(k); homeOf.set(s.key, k); H.sessions.push(s); H.total++; }
+  } else
   for (const f of RAW.floors) {
     const home = rootOf(f.proj), H = g(home);
     if (home !== f.proj) H.parts.push(f.proj);
@@ -1162,8 +1170,9 @@ function applySnap() { // 정리 규칙대로 층을 다시 묶고, 숨긴 층�
   }
   ALL = [...G.values()].filter(F => F.sessions.length).map(F => {
     F.sessions.sort((a, b) => b.mtime - a.mtime);
-    return Object.assign(F, { name: layout.names[F.proj] || (F.proj === RAW.self ? '관리실' : F.orig) || (F.proj.startsWith('new:') ? '새 층' : F.proj.split('/').pop()), mtime: F.sessions[0].mtime, active: F.sessions.some(s => s.active) });
-  }).sort((a, b) => a.name.localeCompare(b.name) || a.proj.localeCompare(b.proj));
+    const ak = F.proj.startsWith('agent:') ? F.proj.slice(6) : '';
+    return Object.assign(F, { kind: ak, name: layout.names[F.proj] || (ak ? `${baseName(ak)}의 사무실` : '') || (F.proj === RAW.self ? '관리실' : F.orig) || (F.proj.startsWith('new:') ? '새 층' : F.proj.split('/').pop()), mtime: F.sessions[0].mtime, active: F.sessions.some(s => s.active) });
+  }).sort((a, b) => a.kind || b.kind ? AGENT_ORDER.indexOf(a.kind) - AGENT_ORDER.indexOf(b.kind) : a.name.localeCompare(b.name) || a.proj.localeCompare(b.proj));
   hiddenN = ALL.filter(F => hidden.has(F.proj)).length;
   const vis = ALL.filter(F => !hidden.has(F.proj)), base = RAW.self && vis.find(F => F.proj === rootOf(RAW.self)); // 클로드 오피스 폴더는 지하 1층 관리실
   // 오래 쉰 층은 접어 둠: 번호는 위쪽(보이는 층 다음)으로 주고 건물 단면·안내판에서만 뺌. 통계(이달의 직원·출퇴근)엔 그대로 남음
@@ -1203,7 +1212,7 @@ function renderDir() {
   const base = SNAP.floors.filter(f => f.n < 0);
   $('#base').innerHTML = base.map(card).join(''); $('#rail').classList.toggle('hasBase', !!base.length);
   const ub = $('#unhide'); ub.hidden = !hiddenN; ub.textContent = `숨긴 층 ${hiddenN}개 되돌리기`;
-  $('#recentSel').value = String(recentDays); $('#recentN').textContent = staleN ? `쉬는 층 ${staleN}개 접어 둠` : '';
+  $('#groupSel').value = groupBy; $('#recentSel').value = String(recentDays); $('#recentN').textContent = staleN ? `쉬는 층 ${staleN}개 접어 둠` : '';
   const f = SNAP.floors.find(x => x.n === curFloorN), s = allSessions().find(x => x.key === curKey);
   $('#tfl').textContent = view === 'ceo' ? '대표' : view === 'lobby' ? '1F' : view === 'roof' ? 'RF' : f ? fno(f.n) : '-';
   $('#tname').textContent = view === 'ceo' ? `${SNAP.user || ''} 대표실` : view === 'lobby' ? '로비' : view === 'roof' ? '옥상정원' : f ? f.name : TITLE;
@@ -1232,6 +1241,7 @@ document.addEventListener('click', (e) => { if (!e.target.closest('#pop') && !e.
 $('#pop').addEventListener('click', (e) => { const ss = e.target.closest('.ss'); if (ss) { setFollow(false); switchTo(ss.dataset.k); closePop(); } });
 $('#pop').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const ss = e.target.closest('.ss'); if (ss) ss.click(); } if (e.key === 'Escape') closePop(); });
 $('#unhide').onclick = () => { hidden.clear(); relayout(); };
+$('#groupSel').onchange = (e) => { groupBy = e.target.value; try { localStorage.setItem('office.groupBy', JSON.stringify(groupBy)); } catch { } relayout(); };
 $('#recentSel').onchange = (e) => { recentDays = +e.target.value; try { localStorage.setItem('office.recentDays', JSON.stringify(recentDays)); } catch { } relayout(); };
 $('#rail').addEventListener('click', (ev) => {
   const x = ev.target.closest('.x');
@@ -1390,7 +1400,7 @@ function renderTidy() {
     <p class="note" style="margin:-4px 0 6px">빈칸으로 두고 <b>모든 층에</b>를 누르면 원래 이름(Claude · Codex · Antigravity)으로 돌아가요.</p>
     <div class="row"><span class="lab">꾸미기</span><select id="tTheme" style="flex:1">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${(layout.deco[F.proj] || {}).theme === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select>
       ${PROPS.map(([k, lab]) => `<label class="chip" style="cursor:pointer;padding-right:9px"><input type="checkbox" data-prop="${k}" ${(layout.deco[F.proj] || {})[k] ? 'checked' : ''}>${lab}</label>`).join('')}</div>
-    <div class="row"><span class="lab">폴더</span><span class="path">${esc(cwd ? cwd.replace(/^\/(Users|home)\/[^/]+/, '~') : F.proj.startsWith('new:') ? '직접 만든 층' : F.proj)}</span></div>
+    <div class="row"><span class="lab">폴더</span><span class="path">${esc(cwd ? cwd.replace(/^\/(Users|home)\/[^/]+/, '~') : F.proj.startsWith('new:') ? '직접 만든 층' : F.proj.startsWith('agent:') ? '직원별 층 (여러 폴더의 세션이 모여 있어요)' : F.proj)}</span></div>
     ${F.parts.length ? `<h4>이 층에 합친 층</h4><div>${F.parts.map(p => `<span class="chip">${esc(layout.names[p] || (RAW.floors.find(f => f.proj === p) || {}).name || p)}<button data-a="split" data-p="${esc(p)}">떼어내기</button></span>`).join('')}</div>` : ''}
     <h4>세션 ${F.sessions.length}개 — 다른 층으로 옮기려면 오른쪽에서 고르세요</h4>
     ${F.sessions.map(s => `<div class="sl"><span class="who ${whoCls(s)}">${BRAND[kindOf(s)]}</span><span class="t" title="${esc(s.label)}">${esc(s.label)}</span><span class="w">${agoTxt(s.mtime)}</span>
