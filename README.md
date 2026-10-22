@@ -1,6 +1,6 @@
 # 🏢 클로드 오피스
 
-**Claude Code**(와 Codex)가 하는 일을 브라우저 속 작은 사무실 캐릭터로 보여주는 도구예요.
+**Claude Code**(와 Codex · Antigravity)가 하는 일을 브라우저 속 작은 사무실 캐릭터로 보여주는 도구예요.
 Claude가 파일을 읽으면 자료실로, 코드를 고치면 개발실로, 명령을 실행하면 서버실로 걸어가요. 질문이 있으면 엘리베이터를 타고 대표실(나)에게 올라와요.
 
 ![클로드 오피스 — 사무실 화면](docs/office.jpg)
@@ -214,6 +214,22 @@ OpenAI Codex(앱 또는 CLI)를 쓰면 `~/.codex/sessions` 기록도 같이 읽�
 - Codex를 빼고 싶으면 `NO_CODEX=1 node server.js`
 
 ---
+
+## 🛸 Antigravity도 같이 (훅 설치 한 번)
+
+Google Antigravity(앱 · IDE · CLI)는 기록 파일 형식이 공개돼 있지 않아서, **훅**(Antigravity가 일할 때마다 부르는 작은 명령)으로 신호를 받아요.
+
+```bash
+node install-agy.js          # 채용 (한 번만). Antigravity 를 껐다 켜면 반영
+node install-agy.js --remove # 해고(훅 빼기)
+```
+
+- `~/.gemini/config/hooks.json` 에 `claude-office` 묶음 하나만 넣어요. 다른 훅은 그대로 두고, 고치기 전에 `hooks.json.before-claude-office` 로 백업해요
+- 보라 옷 · ▲ 명찰 · 머리 위 고리를 하고 **둥둥 떠다니는** 직원이에요. 개발실 뒷줄 공용 책상이 자리예요
+- 쓰는 훅: `SessionStart` · `PreInvocation`(생각 시작) · `PostToolUse`(도구 하나 끝) · `PostInvocation`(답 끝 → 대표실로 보고)
+- **안전**: 훅은 항상 빈 답 `{}` 만 내요. 도구를 허락/거절할 수 있는 `PreToolUse` 와 멈춤을 막을 수 있는 `Stop` 은 일부러 안 써요. 오피스 서버가 꺼져 있어도 1초 안에 넘어가서 Antigravity 작업을 막지 않아요
+- 서버가 `4777` 이 아닌 포트면 훅에도 `CLAUDE_OFFICE_PORT` 를 맞춰 주세요
+- 층 정리 창(⋯)에서 Antigravity 직원 이름도 바꿀 수 있어요
 
 ## ⚙️ 고급 설정
 
