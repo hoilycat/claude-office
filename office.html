@@ -283,6 +283,9 @@ body.priv :is(.fl:not(.rf):not(.lobby) b,#tname,#mproj,#msess,.al b,.al p,.bub,.
 .cr .paybtn:hover{background:#e86f22}
 #tidy .pr{display:grid;grid-template-columns:96px 112px 1fr;gap:8px;align-items:center;margin:8px 0}
 #tidy .pr .st{grid-column:2/4;font-size:11.5px;color:var(--sub);margin-top:-4px}
+#tidy .pr .sch{grid-column:2/4;display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12px;color:var(--sub);margin-top:-2px}
+#tidy .pr .sch label{display:flex;align-items:center;gap:5px;cursor:pointer}
+#tidy .pr .sch input[type=date]{flex:none;padding:3px 6px}
 .cr .r1 b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .r2{font-size:11.5px;color:#565b74;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .cr .r3{font-size:11px;color:var(--faint);margin-top:1px}
@@ -785,9 +788,14 @@ function drawPerson(a, t) {
   if (L.pin) { rrect(5, hy - 11, 7, 3, 1.5, L.pin, OUT); circle(11, hy - 9.5, 2, '#ff8fa8', OUT); }
   if (L.ahoge) { ctx.strokeStyle = L.hair; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, hy - 13); ctx.quadraticCurveTo(5, hy - 20, 1, hy - 23); ctx.stroke(); }
   if (L.headset) { ctx.strokeStyle = '#3a4252'; ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(0, hy - 1, 14, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke(); rrect(-16, hy - 3, 5, 9, 2.5, L.headset, OUT); rrect(11, hy - 3, 5, 9, 2.5, L.headset, OUT); ctx.strokeStyle = '#3a4252'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-13.5, hy + 5); ctx.quadraticCurveTo(-11, hy + 10, -5, hy + 9.5); ctx.stroke(); circle(-5, hy + 9.5, 1.6, '#3a4252'); }
-  if (L.halo) { ctx.strokeStyle = L.halo; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, hy - 19 - Math.sin(t * 3 + a.seed) * 1.2, 9, 3, 0, 0, 7); ctx.stroke(); }
+  if (L.halo) { ctx.strokeStyle = L.halo; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, hy - (!a.avatar && scholarOf(a.kind) ? 26 : 19) - Math.sin(t * 3 + a.seed) * 1.2, 9, 3, 0, 0, 7); ctx.stroke(); }
   if (L.cap) { ctx.beginPath(); ctx.arc(0, hy - 2.5, 13.2, Math.PI, 0); ctx.closePath(); ctx.fillStyle = L.cap; ctx.fill(); rrect(-14, hy - 5, 9, 3.5, 1.6, shade(L.cap, -.15)); circle(0, hy - 10, 2.2, '#ffd25a'); }
   if (L.hat) { ctx.beginPath(); ctx.arc(0, hy - 3, 13.5, Math.PI, 0); ctx.closePath(); ctx.fillStyle = L.hat; ctx.fill(); rrect(-2, hy - 5, 18, 4, 2, shade(L.hat, -.12)); }
+  if (!a.avatar && scholarOf(a.kind)) { // 🎓 장학생 학사모
+    rrect(-7.5, hy - 14, 15, 5.5, 2, '#2b2350', OUT);
+    ctx.beginPath(); ctx.moveTo(-13, hy - 15); ctx.lineTo(0, hy - 19.5); ctx.lineTo(13, hy - 15); ctx.lineTo(0, hy - 10.5); ctx.closePath(); ctx.fillStyle = '#332a5c'; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 1; ctx.stroke();
+    const sw2 = Math.sin(t * 2.4 + a.seed) * 1.2; ctx.strokeStyle = '#ffd34d'; ctx.lineWidth = 1.3; ctx.beginPath(); ctx.moveTo(0, hy - 15); ctx.lineTo(10, hy - 14); ctx.lineTo(10 + sw2, hy - 6); ctx.stroke(); circle(10 + sw2, hy - 5, 1.6, '#ffd34d');
+  }
   const bt = t * 1.3 + a.seed, blink = Math.floor(bt) % 5 === 0 && bt % 1 < .12;
   if (blink) { ctx.fillStyle = '#2b2232'; ctx.fillRect(-6.4, hy + 2, 4, 1.3); ctx.fillRect(2.4, hy + 2, 4, 1.3); }
   else { ellipse(-4.4, hy + 2.2, 1.9, 2.5, '#2b2232'); ellipse(4.4, hy + 2.2, 1.9, 2.5, '#2b2232'); circle(-3.8, hy + 1.3, .7, '#fff'); circle(5, hy + 1.3, .7, '#fff'); }
@@ -1908,8 +1916,12 @@ const PROTEST = ['월급 주세요!! 🪧', '체불 반대! ✊', '대표님… 
 const pay = Object.assign({ cfg: {}, paid: {} }, load('office.payday', {}));
 const savePay = () => { try { localStorage.setItem('office.payday', JSON.stringify(pay)); } catch { } };
 const monthOf = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}`;
+// 🎓 장학생: 무료 기간 동안은 월급 없음 · 시위 없음. 끝나는 날이 지나면 정식 직원 (월급날 = 정한 날, 없으면 끝나는 날짜의 '일')
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const isScholar = (kind) => { const c = pay.cfg[kind]; return !!(c && c.free && (!c.until || todayStr() < c.until)); };
+const payDay = (kind) => { const c = pay.cfg[kind] || {}; return c.day || (c.free && c.until ? +c.until.slice(8, 10) : 0); };
 function payState(kind) { // null | { diff } — diff: 월급날까지 남은 날 (0 = 오늘, 음수 = 체불)
-  const c = pay.cfg[kind]; if (!c || !c.day || pay.paid[kind] === monthOf()) return null;
+  const c = Object.assign({}, pay.cfg[kind], { day: payDay(kind) }); if (!c.day || isScholar(kind) || pay.paid[kind] === monthOf()) return null;
   const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const diff = Math.round((new Date(now.getFullYear(), now.getMonth(), Math.min(c.day, last)) - today) / 864e5);
@@ -1917,11 +1929,13 @@ function payState(kind) { // null | { diff } — diff: 월급날까지 남은 �
 }
 let picketCache = { at: 0, v: {} };
 const grumpOf = (kind) => (picketOf(kind), (picketCache.g || {})[kind] || 0);
+const scholarOf = (kind) => (picketOf(kind), !!(picketCache.s || {})[kind]);
 function picketOf(kind) {
   if (!PAY_KINDS.includes(kind)) return '';
   if (performance.now() - picketCache.at > 3000) {
     const v = {}, g = {}; for (const k of PAY_KINDS) { const st = payState(k); if (st) { v[k] = st.diff > 0 ? `월급날 D-${st.diff}!` : st.diff === 0 ? '월급 주세요!!' : `체불 ${-st.diff}일째!!`; g[k] = st.diff > 0 ? 0 : st.diff > -3 ? 1 : 2; } }
-    picketCache = { at: performance.now(), v, g };
+    const sc = {}; for (const k of PAY_KINDS) if (isScholar(k)) sc[k] = true;
+    picketCache = { at: performance.now(), v, g, s: sc };
   }
   return picketCache.v[kind] || '';
 }
@@ -1955,12 +1969,15 @@ async function payCeremony(kinds, preview) {
   setView('ceo'); syncCeo();
   for (const a of ceoQ.values()) a.say('', '', ''); // 결재 줄 직원들은 잠깐 조용히
   const me = ceoMe, crew = [];
+  const watchers = PAY_KINDS.filter(isScholar); kinds = kinds.filter(k => !isScholar(k));
+  if (!kinds.length) { payRunning = false; toast('🎓 장학생은 월급이 없어요 — 대신 구경만!'); return; }
   const xs = kinds.length === 1 ? [6.4] : kinds.length === 2 ? [5.4, 7.4] : [4.4, 6.4, 8.4];
   elevTarget = 1;
   kinds.forEach((k, i) => {
     const a = new Actor(k, CEO_ELEV.in[0], CEO_ELEV.in[1]); a.scene = 'ceo'; a.setName(staff(k), '월급날'); ceoActors.push(a); crew.push(a);
     a.go = a.walk([CEO_ELEV.out, [xs[i], CEO_ELEV.out[1]], [xs[i], 5.0]]);
   });
+  const fans = watchers.map((k, i) => { const a = new Actor(k, CEO_ELEV.in[0], CEO_ELEV.in[1]); a.scene = 'ceo'; a.setName(staff(k), '🎓 구경'); ceoActors.push(a); a.go = a.walk([CEO_ELEV.out, [2.6 + i * .9, 6.2]]); return a; });
   me.say('', '', preview ? '(미리보기) 자, 월급날입니다…!' : '자… 월급날입니다…!', 2600);
   await Promise.all(crew.map(a => a.go)); elevTarget = 0;
   await sleep(500);
@@ -1974,6 +1991,7 @@ async function payCeremony(kinds, preview) {
     payFx.push({ kind: 'text', text: '+100 행복 💖', color: '#2f9e66', a: [a.x, a.y, 95], t0: performance.now(), dur: 2400 });
     await sleep(2400);
   }
+  for (const a of fans) { a.say('', '🎓 장학생', '저는 장학금으로 다니고 있어서요… 🎓', 2400); await sleep(2500); }
   const amts = kinds.map(k => (pay.cfg[k] || {}).amt).filter(Boolean);
   me.slump = true; me.mood = 'sweat';
   me.say('error', '재정 -100', '너희가 번 돈보다 내가 쓴 돈이 더 많아……. 🧿👄🧿', 5200);
@@ -1984,9 +2002,10 @@ async function payCeremony(kinds, preview) {
   await sleep(4200);
   crew.forEach(a => { a.say('report', '', '감사합니다! 🙇', 1600); a.badge = ''; });
   elevTarget = 1;
-  await Promise.all(crew.map(a => a.walk([[a.x, CEO_ELEV.out[1]], CEO_ELEV.out, CEO_ELEV.in])));
+  const all = crew.concat(fans);
+  await Promise.all(all.map(a => a.walk([[a.x, CEO_ELEV.out[1]], CEO_ELEV.out, CEO_ELEV.in])));
   elevTarget = 0;
-  crew.forEach(a => { a.remove(); ceoActors.splice(ceoActors.indexOf(a), 1); });
+  all.forEach(a => { a.remove(); ceoActors.splice(ceoActors.indexOf(a), 1); });
   setTimeout(() => { me.slump = false; me.mood = ''; }, 3000);
   payRunning = false; renderDir(); renderCrew();
 }
@@ -1996,20 +2015,22 @@ let payMode = false;
 function openPay() { payMode = true; tidyProj = null; $('#tidyBg').classList.add('open'); renderPay(); }
 function renderPay() {
   const opt = (d) => `<option value="0">없음</option>` + Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${d === i + 1 ? 'selected' : ''}>매달 ${i + 1}일</option>`).join('');
-  const stTxt = (k) => { const c = pay.cfg[k]; if (!c || !c.day) return '월급날을 정하면 그 3일 전부터 🪧 시위해요'; if (pay.paid[k] === monthOf()) return '✅ 이번 달 지급 완료 — 행복도 MAX'; const st = payState(k); return st ? (st.diff > 0 ? `🪧 월급날 D-${st.diff} — 시위 중` : `🪧 ${payWord(st)} 대표실에서 지급해 주세요`) : '아직 여유 있어요 ☕'; };
+  const stTxt = (k) => { const c = pay.cfg[k]; if (isScholar(k)) return `🎓 장학생 — ${c.until ? c.until + ' 까지 무료, 그다음부터 매달 ' + payDay(k) + '일 월급날' : '무료로 일하는 중 (끝나는 날을 정하면 그날부터 정식 직원)'}`; if (!c || !payDay(k)) return '월급날을 정하면 그 3일 전부터 🪧 시위해요'; if (pay.paid[k] === monthOf()) return '✅ 이번 달 지급 완료 — 행복도 MAX'; const st = payState(k); return st ? (st.diff > 0 ? `🪧 월급날 D-${st.diff} — 시위 중` : `🪧 ${payWord(st)} 대표실에서 지급해 주세요`) : '아직 여유 있어요 ☕'; };
   $('#tidy').innerHTML = `<header><span class="no jua">💸</span><h3 class="jua" id="tidyH">월급날</h3><button data-a="close" aria-label="닫기">×</button></header>
   <div class="bd">
     <p class="note" style="margin-top:0">구독 결제일을 적어 두면 그날 대표실에서 월급 지급식을 해요. 실제 결제와는 <b>연결 안 돼요</b> — 날짜·금액은 이 브라우저에만 저장되고, 금액은 그냥 표시용이에요.</p>
     ${PAY_KINDS.map(k => `<div class="pr"><b class="who ${({ codex: 'cx', agy: 'ag' })[k] || ''}">${esc(staff(k))}</b><select data-pay-day="${k}" aria-label="${esc(staff(k))} 월급날">${opt((pay.cfg[k] || {}).day || 0)}</select>
-      <input data-pay-amt="${k}" value="${esc((pay.cfg[k] || {}).amt || '')}" placeholder="금액 (표시용, 예: ₩29,000)" maxlength="16" aria-label="${esc(staff(k))} 월급 금액"><span class="st">${stTxt(k)}</span></div>`).join('')}
+      <input data-pay-amt="${k}" value="${esc((pay.cfg[k] || {}).amt || '')}" placeholder="금액 (표시용, 예: ₩29,000)" maxlength="16" aria-label="${esc(staff(k))} 월급 금액">
+      <span class="sch"><label><input type="checkbox" data-pay-free="${k}" ${(pay.cfg[k] || {}).free ? 'checked' : ''}> 🎓 장학생 (무료)</label>${(pay.cfg[k] || {}).free ? `<label>무료 끝나는 날 <input type="date" data-pay-until="${k}" value="${esc((pay.cfg[k] || {}).until || '')}"></label>` : ''}</span><span class="st">${stTxt(k)}</span></div>`).join('')}
   </div>
   <footer><button class="btn" data-a="payPreview">▶ 지급식 미리보기</button><span class="sp"></span>${payDue().length ? `<button class="btn" data-a="payNow">💸 지금 지급하기</button>` : ''}<button class="btn pri" data-a="close">다 했어요</button></footer>`;
 }
 function payInput(e) {
-  const d = e.target.dataset.payDay, m = e.target.dataset.payAmt;
-  if (!d && !m) return;
-  const k = d || m; pay.cfg[k] = Object.assign({}, pay.cfg[k], d ? { day: +e.target.value } : { amt: e.target.value.trim().slice(0, 16) });
-  savePay(); picketCache.at = 0; if (d) renderPay(); renderDir(); renderCrew();
+  const ds = e.target.dataset, k = ds.payDay || ds.payAmt || ds.payFree || ds.payUntil;
+  if (!k) return;
+  const ch = ds.payDay ? { day: +e.target.value } : ds.payAmt ? { amt: e.target.value.trim().slice(0, 16) } : ds.payFree ? { free: e.target.checked } : { until: /^\d{4}-\d{2}-\d{2}$/.test(e.target.value) ? e.target.value : '' };
+  pay.cfg[k] = Object.assign({}, pay.cfg[k], ch);
+  savePay(); picketCache.at = 0; if (!ds.payAmt) renderPay(); renderDir(); renderCrew();
 }
 function renderCeoCrew() {
   const list = ceoWaiting();
