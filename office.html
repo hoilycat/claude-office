@@ -351,7 +351,7 @@ body.priv :is(.fl:not(.rf):not(.lobby) b,#tname,#mproj,#msess,.al b,.al p,.bub,.
     <div id="base"></div>
     <button id="unhide" hidden></button>
     <label id="recent" title="오래 쉰 층은 접어 둬요. 다시 일하면 저절로 나타나요">🗓 <select id="recentSel" aria-label="최근 며칠 안에 일한 층만 보기"><option value="1">오늘</option><option value="3">3일</option><option value="7">7일</option><option value="30">30일</option><option value="0">전부</option></select><span>안에 일한 층만 보기</span><b id="recentN"></b></label>
-    <label id="group" title="층을 작업 폴더로 나눌지, 직원(Claude · Codex · Antigravity)으로 나눌지">🏢 층 나누기 <select id="groupSel" aria-label="층 나누는 방법"><option value="folder">폴더별</option><option value="agent">직원별</option></select></label>
+    <label id="group" title="층을 작업 폴더로 나눌지, 직원(Claude · Codex · Antigravity)으로 나눌지">🏢 층 나누기 <select id="groupSel" aria-label="층 나누는 방법"><option value="folder">폴더별</option><option value="agent">직원별</option><option value="all">다같이 한 층</option></select></label>
   </aside>
   <div id="setupBg"><form id="setup" role="dialog" aria-modal="true" aria-labelledby="setupH" autocomplete="off"></form></div>
   <div id="tidyBg"><div id="tidy" role="dialog" aria-modal="true" aria-labelledby="tidyH"></div></div>
@@ -405,7 +405,8 @@ const curProj = () => { const f = SNAP && SNAP.floors.find(x => x.n === curFloor
 // 이름 고르는 순서: 이 층 이름 → 모든 층 기본 이름(layout.workers['*']) → 원래 이름
 const baseName = (kind) => ((layout.workers['*'] || {})[kind]) || BRAND[kind];
 const staff = (kind, proj = curProj()) => ((layout.workers[proj] || {})[kind]) || baseName(kind);
-const nameActor = (W) => { const n = staff(W.kind); W.actor.setName(n, n !== BRAND[W.kind] ? BRAND[W.kind] : ''); };
+const workerName = (W) => staff(W.kind) + (W.no > 1 ? ' ' + W.no : ''); // 같은 종류가 여럿이면 '다정이 2' 처럼
+const nameActor = (W) => { const n = staff(W.kind); W.actor.setName(workerName(W), n !== BRAND[W.kind] ? BRAND[W.kind] : ''); };
 const AG_OFF = [0, 1.1, -1.1, 2.1, -2.1, .55];
 const PEOPLE = {
   claude: { body: '#e2733f', hair: '#5b3a26', label: 'Claude', dot: '#e2733f', mark: '✳', ahoge: true },
@@ -901,15 +902,26 @@ function route(from, target) {
   pts.push(target);
   return pts;
 }
-function spotFor(room, idx, kind = 'claude') {
+// 같은 종류 직원이 여러 명일 때: 두 번째부터는 빈 책상(EXTRA_SEATS)에 앉고, 방에 가면 OFFS 만큼 비켜 섬
+const EXTRA_SEATS = [
+  { spot: [10.6, 2.45], room: 'dev' },                                   // 개발실 뒷줄 가운데
+  { spot: [2.75, 14.15], room: 'web' }, { spot: [4.35, 14.15], room: 'web' }, // 정보검색실 모니터 앞
+  { spot: [3.3, 4.5], room: 'library' }, { spot: [4.7, 4.5], room: 'library' }, // 자료실 책상
+  { spot: [3.7, 2.25], room: 'library' },
+];
+const OFFS = [0, .85, -.85, 1.7, -1.7, 2.4, -2.4];
+const MAX_WORKERS = 9; // 한 사무실에 동시에 출근하는 직원 수 (책상 3 + 빈 책상 6)
+function spotFor(room, idx, who = 'claude') {
+  const kind = typeof who === 'string' ? who : who.kind, seat = typeof who === 'object' ? who.seat : null, n = (typeof who === 'object' && who.off) || 0;
   const H = HOME[kind] || HOME.claude;
+  if (seat && (room === 'report' || room === 'desk' || room === 'phone' || (room === 'dev' && idx == null))) return pt(seat.spot[0], seat.spot[1], seat.room);
   if (room === 'report') return pt(H.report[0], H.report[1], 'dev');
   if (room === 'desk' || room === 'phone' || (room === 'dev' && idx == null)) return pt(H.spot[0], H.spot[1], 'dev');
-  if (room === 'boss') return pt(SPOTS.elevOut[0] + (kind === 'codex' ? .5 : kind === 'agy' ? 1 : 0), SPOTS.elevOut[1], 'lobby'); // 질문 → 엘리베이터 타고 대표실로
+  if (room === 'boss') return pt(SPOTS.elevOut[0] + (kind === 'codex' ? .5 : kind === 'agy' ? 1 : 0) + n * .35, SPOTS.elevOut[1] + (n % 2) * .4, 'lobby'); // 질문 → 엘리베이터 타고 대표실로
   if (room === 'lobby') return pt(13.6 + ((idx || 0) % 4) * .8, 9.25, 'lobby');
-  const r = ROOMS[room]; if (!r) return spotFor('desk', null, kind);
-  const kOff = kind === 'codex' ? -1.3 : kind === 'agy' ? 1.1 : 0;
-  if (idx == null) return pt(Math.min(r.x + r.w - .6, Math.max(r.x + .6, r.spot[0] + kOff)), r.spot[1] + (kind === 'agy' ? -.6 : 0), room);
+  const r = ROOMS[room]; if (!r) return spotFor('desk', null, who);
+  const kOff = (kind === 'codex' ? -1.3 : kind === 'agy' ? 1.1 : 0) + OFFS[n % OFFS.length];
+  if (idx == null) return pt(Math.min(r.x + r.w - .6, Math.max(r.x + .6, r.spot[0] + kOff)), Math.min(r.y + r.h - .4, Math.max(r.y + .5, r.spot[1] + (kind === 'agy' ? -.6 : 0) + (n % 2 ? .55 : 0))), room);
   const base = r.agent || r.spot, off = AG_OFF[idx % AG_OFF.length] + (room === 'dev' ? 0 : .9);
   const x = Math.max(r.x + .6, Math.min(r.x + r.w - .6, base[0] + off));
   return pt(room === 'dev' ? Math.min(x, 10.6) : x, base[1], room);
@@ -942,19 +954,19 @@ function freeIdx(extra) {
 function removeWorker(W) { W.gone = true; W.actor.remove(); W.agents.forEach(a => a.actor.remove()); }
 function clearScene() { if (!scene) return; scene.workers.forEach(removeWorker); if (scene.me) dropVisitor(); }
 
-function makeWorker(sess) {
+function makeWorker(sess, seat = null, off = 0) {
   const kind = kindOf(sess);
   const st = sess.state || { room: 'desk', agents: [], board: [], idle: true };
-  const W = { key: sess.key, kind, agents: new Map(), lastEv: st.idle ? 0 : Date.now(), board: st.board || [],
+  const W = { key: sess.key, kind, seat, off, agents: new Map(), lastEv: st.idle ? 0 : Date.now(), board: st.board || [],
     tools: sess.tools || 0, started: sess.started || sess.mtime, lastTool: fmtTool(st.tool, st.detail), label: sess.label };
-  const sp = spotFor(st.idle ? 'rest' : (st.room || 'desk'), null, kind);
+  const sp = spotFor(st.idle ? 'rest' : (st.room || 'desk'), null, W);
   W.actor = new Actor(kind, sp.x, sp.y); nameActor(W);
   // 답 기다리는 중이면 대표실에 올라가 있는 상태로
   if (sess.waiting && Date.now() - sess.waiting < WAIT_MS) { W.actor.x = SPOTS.elevIn[0]; W.actor.y = SPOTS.elevIn[1]; W.actor.away = true; W.upstairs = true; W.actor.badge = 'ask'; }
   if (!st.idle) { W.actor.mood = st.mood || ''; if (st.mood === 'think' && st.bubble) W.actor.say('think', '고민 중…', st.bubble.text, 6000); }
   else W.actor.badge = 'coffee';
   for (const a of st.agents || []) {
-    const idx = freeIdx(W), s = spotFor(a.room === 'lobby' ? 'lobby' : a.room, idx, kind);
+    const idx = freeIdx(W), s = spotFor(a.room === 'lobby' ? 'lobby' : a.room, idx, W);
     const act = new Actor(a.type, s.x, s.y); act.setName(plabel(a.type), a.desc);
     if (a.tool) act.mood = 'work';
     W.agents.set(a.id, { actor: act, info: a, idx, leaving: false, tools: a.tools || 0, since: a.since || Date.now(), last: fmtTool(a.tool, a.detail) });
@@ -965,22 +977,33 @@ function buildScene(sess) {
   clearScene();
   scene = { primary: sess.key, floor: sess.floor.n, workers: new Map(), ringUntil: 0, logs: 0 };
   scene.me = null; // 사용자는 각 층이 아니라 대표실에 있음
-  scene.workers.set(sess.key, makeWorker(sess));
+  const P0 = makeWorker(sess); P0.seatIdx = -1; scene.workers.set(sess.key, P0);
   syncCompanion();
   $('#alog').innerHTML = '<div class="none">아직 기록이 없어요. 이 층에서 Claude·Codex·Antigravity가 움직이면 여기에 쌓여요.</div>';
   renderCrew(); loadLog();
 }
-// 같은 층에서 다른 쪽(Claude↔Codex)이 최근에 일하고 있으면 같이 출근시킴
+// 같은 층에서 최근(15분 안)에 일한 세션들이 같이 출근 — 종류마다 첫 사람은 자기 책상, 두 번째부터는 빈 책상(EXTRA_SEATS)
 function syncCompanion() {
   if (!scene || !SNAP) return;
   const P = primary(); if (!P) return;
   const f = SNAP.floors.find(x => x.sessions.some(s => s.key === scene.primary)); if (!f) return;
-  const mates = ['claude', 'codex', 'agy'].filter(k => k !== P.kind)
-    .map(k => f.sessions.filter(s => s.key !== scene.primary && s.state && kindOf(s) === k).sort((a, b) => b.mtime - a.mtime)[0]).filter(Boolean);
-  const keep = new Set(mates.map(m => m.key));
+  const others = f.sessions.filter(s => s.key !== scene.primary && s.state).sort((a, b) => b.mtime - a.mtime).slice(0, MAX_WORKERS - 1);
+  const keep = new Set(others.map(s => s.key));
   for (const [k, W] of scene.workers) if (k !== scene.primary && !keep.has(k)) { removeWorker(W); scene.workers.delete(k); }
+  const home = {}; for (const W of scene.workers.values()) if (!W.seat) home[W.kind] = W.key;
+  const used = new Set([...scene.workers.values()].filter(W => W.seat).map(W => W.seatIdx));
   let added = false;
-  for (const m of mates) if (!scene.workers.has(m.key)) { scene.workers.set(m.key, makeWorker(m)); added = true; }
+  for (const m of others) {
+    if (scene.workers.has(m.key)) continue;
+    const k = kindOf(m); let seat = null, seatIdx = -1;
+    if (home[k]) { seatIdx = EXTRA_SEATS.findIndex((_, i) => !used.has(i)); if (seatIdx < 0) continue; used.add(seatIdx); seat = EXTRA_SEATS[seatIdx]; }
+    else home[k] = m.key;
+    const W = makeWorker(m, seat); W.seatIdx = seatIdx; scene.workers.set(m.key, W); added = true;
+  }
+  for (const k of ['claude', 'codex', 'agy']) { // 번호 · 비켜 설 순서 다시 매김 (자기 책상 = 1번)
+    const ws = [...scene.workers.values()].filter(W => W.kind === k).sort((a, b) => (a.seat ? 1 : 0) - (b.seat ? 1 : 0) || a.seatIdx - b.seatIdx);
+    ws.forEach((W, i) => { W.no = ws.length > 1 ? i + 1 : 0; W.off = i; nameActor(W); });
+  }
   if (added && scene.logs !== undefined) loadLog();
   renderCrew();
 }
@@ -998,7 +1021,7 @@ async function spawnAgent(W, e) {
   if (W.gone || A.leaving) return;
   if (A.doneQueued) return agentDone(W, e.id);
   if (A.pending) { const p = A.pending; A.pending = null; agentTool(W, e.id, p, true); }
-  else await act.goto(spotFor('lobby', idx, W.kind));
+  else await act.goto(spotFor('lobby', idx, W));
 }
 async function agentTool(W, id, e, replay) {
   const A = W.agents.get(id); if (!A) return;
@@ -1007,14 +1030,14 @@ async function agentTool(W, id, e, replay) {
   if (A.leaving) { A.leaving = false; A.actor.say('', '', '앗, 일이 하나 더!', 1500); }
   A.actor.mood = 'work';
   A.actor.say('', e.tool, e.detail || ROOM_KO[e.room], 2600);
-  await A.actor.goto(spotFor(e.room, A.idx, W.kind));
+  await A.actor.goto(spotFor(e.room, A.idx, W));
 }
 async function agentDone(W, id) {
   const A = W.agents.get(id); if (!A) return;
   if (A.arriving) { A.doneQueued = true; return; }
   A.leaving = true; A.actor.mood = ''; A.last = '보고하러 가는 중';
   const ok = () => A.leaving && !W.gone;
-  if (!await A.actor.goto(spotFor('report', null, W.kind)) || !ok()) return;
+  if (!await A.actor.goto(spotFor('report', null, W)) || !ok()) return;
   A.actor.say('report', '보고', A.info.type === 'Guardian' ? '검토 끝! 진행해도 돼요.' : '끝났어요. 결과 드릴게요!', 1700);
   W.actor.say('', '', '수고했어요', 1600);
   await sleep(1800); if (!ok()) return;
@@ -1030,7 +1053,7 @@ async function agentDone(W, id) {
 // 질문하면 엘리베이터 타고 대표실로 올라가서 답을 기다림
 async function goUp(W) {
   const c = W.actor, tok = W.upTok = (W.upTok || 0) + 1, ok = () => !W.gone && W.upTok === tok;
-  if (!await c.goto(spotFor('boss', null, W.kind)) || !ok()) return;
+  if (!await c.goto(spotFor('boss', null, W)) || !ok()) return;
   elevTarget = 1; await sleep(600); if (!ok()) return;
   if (!await c.walk([SPOTS.elevIn]) || !ok()) return;
   c.away = true; W.upstairs = true; elevTarget = 0; renderCrew();
@@ -1093,14 +1116,14 @@ function onEv(e) {
       if (e.room === 'phone') { if (W.kind === 'claude') scene.ringUntil = performance.now() + 2500; c.badge = 'phone'; c.say('', W.kind === 'claude' ? '에이전트 호출' : '도우미 호출', e.detail || '', 2500); }
       else if (e.room === 'boss') { c.badge = 'ask'; if (scene.me) reportToMe(W, e.detail); else { c.say('', '대표실에 질문하러 가요', e.detail || '', 4000); goUp(W); } break; }
       else c.say('', e.tool, e.detail || ROOM_KO[e.room] || '', 3000);
-      c.goto(spotFor(e.room, null, W.kind));
+      c.goto(spotFor(e.room, null, W));
       break;
     }
     case 'wait': if (!W.upstairs) { c.badge = 'ask'; if (scene.me) reportToMe(W); else { c.say('report', '다 했어요!', '대표실에서 답 기다릴게요', 3500); goUp(W); } } break;
     case 'think': c.mood = 'think'; c.say('think', '고민 중…', e.text, 8000); break;
     case 'say': c.mood = ''; c.say('', '', e.text, 6000); break;
     case 'error': c.mood = 'sweat'; c.shakeUntil = performance.now() + 900; c.say('error', '실패', e.text, 5000); setTimeout(() => { if (c.mood === 'sweat') c.mood = ''; }, 5000); break;
-    case 'user': c.mood = ''; c.say('user', `${SNAP.user || '대표'}님 지시`, e.text, 6000); c.goto(spotFor('desk', null, W.kind)); break;
+    case 'user': c.mood = ''; c.say('user', `${SNAP.user || '대표'}님 지시`, e.text, 6000); c.goto(spotFor('desk', null, W)); break;
     case 'spawn': spawnAgent(W, e); break;
     case 'agentTool': agentTool(W, e.id, e); break;
     case 'agentErr': { const A = W.agents.get(e.id); if (A) { A.actor.mood = 'sweat'; A.actor.shakeUntil = performance.now() + 900; A.actor.say('error', '실패', e.text, 3500); setTimeout(() => { A.actor.mood = 'work'; }, 3500); } break; }
@@ -1118,7 +1141,7 @@ setInterval(() => {
       if (s && !s.waiting && !W.actor.walking && Date.now() - W.lastEv > 6e3) { comeDown(W); W.actor.badge = ''; W.lastEv = 0; }
       continue;
     }
-    const c = W.actor, idle = Date.now() - W.lastEv, home = spotFor(idle > 120e3 ? 'rest' : 'desk', null, W.kind); // 2분 넘게 쉬면 휴게실로
+    const c = W.actor, idle = Date.now() - W.lastEv, home = spotFor(idle > 120e3 ? 'rest' : 'desk', null, W); // 2분 넘게 쉬면 휴게실로
     if (idle > 25e3 && !c.walking && Math.hypot(c.x - home.x, c.y - home.y) > .3) { c.mood = ''; c.goto(home); }
     if (idle > 120e3 && c.badge !== 'coffee') { c.badge = 'coffee'; c.mood = ''; }
   }
@@ -1159,8 +1182,8 @@ function renderCrew() {
   const ws = [...scene.workers.values()].sort((a, b) => (b.key === scene.primary) - (a.key === scene.primary));
   for (const W of ws) {
     const [sc, st] = workerStatus(W);
-    h += `<div class="cr ${W.kind}" data-w="${esc(W.key)}"><img src="${avatar(W.kind)}" alt=""><div class="m"><div class="r1"><b>${esc(staff(W.kind))}</b><span class="st ${sc}">${st}</span>${goBtn(W.key, staff(W.kind))}</div>
-      <div class="r2">${esc(W.lastTool || '개발실 자기 자리')}</div><div class="r3">도구 ${W.tools}회 · ${ago(W.started)}째 근무${W.key !== scene.primary ? ' · 같은 층 다른 세션' : ''}</div></div></div>`;
+    h += `<div class="cr ${W.kind}" data-w="${esc(W.key)}"><img src="${avatar(W.kind)}" alt=""><div class="m"><div class="r1"><b>${esc(workerName(W))}</b><span class="st ${sc}">${st}</span>${goBtn(W.key, workerName(W))}</div>
+      <div class="r2">${esc(W.lastTool || '개발실 자기 자리')}</div><div class="r3">도구 ${W.tools}회 · ${ago(W.started)}째 근무${W.seat ? ' · 빈 책상 ' + ({ dev: '개발실', web: '정보검색실', library: '자료실' }[W.seat.room] || '') : ''}${W.key !== scene.primary ? ' · 같은 층 다른 세션' : ''}</div></div></div>`;
     for (const [id, A] of W.agents) {
       const s = A.leaving ? ['report', '보고 중'] : A.actor.mood === 'sweat' ? ['sweat', '진땀'] : A.arriving ? ['rest', '출근 중'] : ['work', '일하는 중'];
       h += `<div class="cr" data-w="${esc(W.key)}" data-a="${esc(id)}"><img src="${avatar(A.actor.kind)}" alt=""><div class="m"><div class="r1"><b>${esc(A.info.desc || plabel(A.info.type))}</b><span class="st ${s[0]}">${s[1]}</span></div>
@@ -1196,7 +1219,7 @@ async function loadLog() {
   if (!sc.logs) box.innerHTML = '<div class="none">아직 기록이 없어요. 이 층에서 Claude·Codex·Antigravity가 움직이면 여기에 쌓여요.</div>';
 }
 function logLine(W, e) {
-  let who = staff(W.kind), kind = W.kind, txt = '';
+  let who = workerName(W), kind = W.kind, txt = '';
   const ag = (id) => W.agents.get(id) || (scene && scene.agentInfo && scene.agentInfo[id]);
   switch (e.k) {
     case 'tool': txt = `${ROOM_KO[e.room] || ''}에서 ${fmtTool(e.tool, e.detail)}`; break;
@@ -1231,7 +1254,7 @@ const saveLayout = () => { try { localStorage.setItem('office.layout', JSON.stri
 const rootOf = (k) => { const seen = new Set(); while (layout.merge[k] && !seen.has(k)) { seen.add(k); k = layout.merge[k]; } return k; };
 let RAW = null, ALL = [], hiddenN = 0, staleN = 0;
 let recentDays = +load('office.recentDays', 7); // 0 = 전부 보기
-let groupBy = load('office.groupBy', 'folder') === 'agent' ? 'agent' : 'folder'; // 층 = 작업 폴더 | 직원 종류
+let groupBy = ['agent', 'all'].includes(load('office.groupBy', 'folder')) ? load('office.groupBy', 'folder') : 'folder'; // 층 = 작업 폴더 | 직원 종류 | 전부 한 층
 const AGENT_ORDER = ['claude', 'codex', 'agy'];
 const isStale = (F) => recentDays > 0 && !F.active && Date.now() - F.mtime > recentDays * 864e5 && F.proj !== rootOf(RAW.self || '') && !F.sessions.some(s => s.key === curKey);
 const homeOf = new Map(); // 세션 → 원래(합치기까지 반영한) 층
@@ -1239,8 +1262,8 @@ function applySnap() { // 정리 규칙대로 층을 다시 묶고, 숨긴 층�
   const orig = new Map(RAW.floors.map(f => [f.proj, f.name])), G = new Map();
   const g = (k) => G.get(k) || G.set(k, { proj: k, orig: orig.get(k) || '', parts: [], total: 0, sessions: [] }).get(k);
   homeOf.clear();
-  if (groupBy === 'agent') { // 직원별 층: 같은 종류 직원의 세션을 한 층에 (폴더 합치기·옮기기는 폴더별일 때만)
-    for (const f of RAW.floors) for (const s of f.sessions) { const k = 'agent:' + kindOf(s), H = g(k); homeOf.set(s.key, k); H.sessions.push(s); H.total++; }
+  if (groupBy === 'agent' || groupBy === 'all') { // 직원별 층 / 다같이 한 층 (폴더 합치기·옮기기는 폴더별일 때만)
+    for (const f of RAW.floors) for (const s of f.sessions) { const k = groupBy === 'all' ? 'all:office' : 'agent:' + kindOf(s), H = g(k); homeOf.set(s.key, k); H.sessions.push(s); H.total++; }
   } else
   for (const f of RAW.floors) {
     const home = rootOf(f.proj), H = g(home);
@@ -1256,7 +1279,7 @@ function applySnap() { // 정리 규칙대로 층을 다시 묶고, 숨긴 층�
   ALL = [...G.values()].filter(F => F.sessions.length).map(F => {
     F.sessions.sort((a, b) => b.mtime - a.mtime);
     const ak = F.proj.startsWith('agent:') ? F.proj.slice(6) : '';
-    return Object.assign(F, { kind: ak, name: layout.names[F.proj] || (ak ? `${baseName(ak)}의 사무실` : '') || (F.proj === RAW.self ? '관리실' : F.orig) || (F.proj.startsWith('new:') ? '새 층' : F.proj.split('/').pop()), mtime: F.sessions[0].mtime, active: F.sessions.some(s => s.active) });
+    return Object.assign(F, { kind: ak, name: layout.names[F.proj] || (ak ? `${baseName(ak)}의 사무실` : F.proj === 'all:office' ? '다같이 사무실' : '') || (F.proj === RAW.self ? '관리실' : F.orig) || (F.proj.startsWith('new:') ? '새 층' : F.proj.split('/').pop()), mtime: F.sessions[0].mtime, active: F.sessions.some(s => s.active) });
   }).sort((a, b) => a.kind || b.kind ? AGENT_ORDER.indexOf(a.kind) - AGENT_ORDER.indexOf(b.kind) : a.name.localeCompare(b.name) || a.proj.localeCompare(b.proj));
   hiddenN = ALL.filter(F => hidden.has(F.proj)).length;
   const vis = ALL.filter(F => !hidden.has(F.proj)), base = RAW.self && vis.find(F => F.proj === rootOf(RAW.self)); // 클로드 오피스 폴더는 지하 1층 관리실
@@ -1485,7 +1508,7 @@ function renderTidy() {
     <p class="note" style="margin:-4px 0 6px">빈칸으로 두고 <b>모든 층에</b>를 누르면 원래 이름(Claude · Codex · Antigravity)으로 돌아가요.</p>
     <div class="row"><span class="lab">꾸미기</span><select id="tTheme" style="flex:1">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${(layout.deco[F.proj] || {}).theme === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select>
       ${PROPS.map(([k, lab]) => `<label class="chip" style="cursor:pointer;padding-right:9px"><input type="checkbox" data-prop="${k}" ${(layout.deco[F.proj] || {})[k] ? 'checked' : ''}>${lab}</label>`).join('')}</div>
-    <div class="row"><span class="lab">폴더</span><span class="path">${esc(cwd ? cwd.replace(/^\/(Users|home)\/[^/]+/, '~') : F.proj.startsWith('new:') ? '직접 만든 층' : F.proj.startsWith('agent:') ? '직원별 층 (여러 폴더의 세션이 모여 있어요)' : F.proj)}</span></div>
+    <div class="row"><span class="lab">폴더</span><span class="path">${esc(cwd ? cwd.replace(/^\/(Users|home)\/[^/]+/, '~') : F.proj.startsWith('new:') ? '직접 만든 층' : F.proj.startsWith('agent:') ? '직원별 층 (여러 폴더의 세션이 모여 있어요)' : F.proj === 'all:office' ? '모든 폴더의 세션이 한 사무실에 모여 있어요' : F.proj)}</span></div>
     ${F.parts.length ? `<h4>이 층에 합친 층</h4><div>${F.parts.map(p => `<span class="chip">${esc(layout.names[p] || (RAW.floors.find(f => f.proj === p) || {}).name || p)}<button data-a="split" data-p="${esc(p)}">떼어내기</button></span>`).join('')}</div>` : ''}
     <h4>세션 ${F.sessions.length}개 — 다른 층으로 옮기려면 오른쪽에서 고르세요</h4>
     ${F.sessions.map(s => `<div class="sl"><span class="who ${whoCls(s)}">${BRAND[kindOf(s)]}</span><span class="t" title="${esc(s.label)}">${esc(s.label)}</span><span class="w">${agoTxt(s.mtime)}</span>

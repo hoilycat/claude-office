@@ -24,6 +24,13 @@ const result = (id, text, err) => U([{ type: 'tool_result', tool_use_id: id, con
 const sub = (agentName, o) => { const d = path.join(projA, sid, 'subagents'); fs.mkdirSync(d, { recursive: true }); line(path.join(d, agentName + '.jsonl'), Object.assign({ isSidechain: true }, o)); };
 
 line(fileB, { type: 'user', message: { role: 'user', content: '보드 칸 효과 정리해줘' } });
+// ── 같은 프로젝트에서 Claude 세션 하나 더 (직원 여러 명 출근 확인용) ──
+const file2 = path.join(projA, 'demo-session-2.jsonl'); let n2 = 0;
+const line2 = (o) => fs.appendFileSync(file2, JSON.stringify(Object.assign({ cwd, sessionId: 'demo-session-2', timestamp: new Date().toISOString() }, o)) + '\n');
+const tool2 = (name, input) => { const id = 'toolu_b' + (++n2); line2({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } }); line2({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] } }); };
+line2({ type: 'user', message: { role: 'user', content: '다크 모드 색 정리해줘' } });
+const script2 = [() => tool2('Grep', { pattern: 'color' }), () => tool2('Read', { file_path: '/Users/me/gagyebu/src/theme.ts' }), () => tool2('Edit', { file_path: '/Users/me/gagyebu/src/theme.ts' }), () => tool2('Bash', { command: 'npm run lint' }), () => tool2('WebSearch', { query: '다크 모드 대비 4.5:1' })];
+let i2 = 0; setInterval(() => script2[i2++ % script2.length](), 2300);
 
 const script = [
   () => U('지출 카테고리별 통계 화면 만들어줘'),
