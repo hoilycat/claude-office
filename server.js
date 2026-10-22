@@ -692,7 +692,53 @@ function handleAgy(d, evName) {
   }
   sendSnapshot();
 }
-function receiveAgy(req, res, evName) {
+// ───────── Gemini CLI (훅 → POST /gemini) ─────────  같은 츠미(agy) 캐릭터로 출근
+const GEM_ROOM = {
+  read_file: 'library', read_many_files: 'library', list_directory: 'library', glob: 'library', search_file_content: 'library', grep: 'library', grep_search: 'library',
+  write_file: 'dev', replace: 'dev', edit: 'dev',
+  run_shell_command: 'server',
+  google_web_search: 'web', web_fetch: 'web',
+  write_todos: 'meeting', save_memory: 'meeting', enter_plan_mode: 'meeting', exit_plan_mode: 'meeting',
+};
+function gemDetail(a) {
+  a = a || {};
+  const f = a.file_path || a.absolute_path || a.path || a.dir_path;
+  if (a.command) return snip(a.command, 48);
+  if (a.query) return snip(a.query, 48);
+  if (a.url) { try { return new URL(a.url).host; } catch { return snip(a.url, 40); } }
+  if (a.pattern) return snip(a.pattern, 40);
+  if (f) return path.basename(String(f));
+  if (a.prompt) return snip(a.prompt, 48);
+  return '';
+}
+function handleGemini(d, evName) {
+  const id = String(d.session_id || '').slice(0, 80); if (!id) return;
+  if (agyDup('gem:' + id, evName, { stepIdx: d.timestamp, toolCall: { name: d.tool_name, args: d.tool_input } })) return;
+  const S = getSession('gemini', id); S.agent = 'agy'; S.main = true; S.src = 'gemini';
+  if (!S.cwd && d.cwd) S.cwd = String(d.cwd);
+  const now = Date.now();
+  if (!S.started) S.started = now;
+  S.mtime = now; markWork(S, now);
+  switch (evName) {
+    case 'BeforeAgent': {
+      const t = snip(d.prompt, 70);
+      if (t) { if (!S.firstPrompt) S.firstPrompt = snip(t, 40); dayRec(S).prompts.push(t); ev(S, true, { k: 'user', text: t }); }
+      ev(S, true, { k: 'think', text: '생각 중…' }); break;
+    }
+    case 'AfterTool': {
+      const name = String(d.tool_name || 'tool'), room = name.startsWith('mcp_') ? 'web' : (GEM_ROOM[name] || agyRoom(name)), detail = gemDetail(d.tool_input);
+      const D = dayRec(S); D.tools[room] = (D.tools[room] || 0) + 1; if (room === 'dev' && detail) D.files.add(detail);
+      ev(S, true, { k: 'tool', tool: name, room, detail });
+      const err = d.tool_response && d.tool_response.error;
+      if (err) { D.errors++; ev(S, true, { k: 'error', text: snip(typeof err === 'string' ? err : (err.message || JSON.stringify(err)), 70) || '도구 실패' }); }
+      break;
+    }
+    case 'Notification': ev(S, true, { k: 'tool', tool: '허락 요청', room: 'boss', detail: snip(d.message, 48) }); break;
+    case 'AfterAgent': { const t = snip(d.prompt_response, 90); if (t) ev(S, true, { k: 'say', text: t }); ev(S, true, { k: 'wait', since: now }); break; }
+  }
+  sendSnapshot();
+}
+function receiveAgy(req, res, evName, handler = handleAgy) {
   // 이 컴퓨터 안의 훅만 받음 (브라우저에서 다른 사이트가 보내는 건 Origin 이 붙어서 막힘)
   const host = req.headers.host || '';
   if (req.headers.origin || !/^(localhost|127\.0\.0\.1):\d+$/.test(host)) { res.writeHead(403); return res.end(); }
@@ -701,7 +747,7 @@ function receiveAgy(req, res, evName) {
   req.on('end', () => {
     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{}');
     if (big) return;
-    try { handleAgy(JSON.parse(body || '{}'), evName); } catch { }
+    try { handler(JSON.parse(body || '{}'), evName); } catch { }
   });
 }
 function snapshot() {
@@ -764,6 +810,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/setup' && req.method === 'POST') return handleSetup(req, res);
+  if (url === '/gemini' && req.method === 'POST') return receiveAgy(req, res, (new URL(req.url, 'http://x').searchParams.get('e') || '').slice(0, 30), handleGemini);
   if (url === '/agy' && req.method === 'POST') return receiveAgy(req, res, (new URL(req.url, 'http://x').searchParams.get('e') || '').slice(0, 30));
   if (url === '/' || url === '/index.html') {
     fs.readFile(HTML, (err, buf) => {

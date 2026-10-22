@@ -244,6 +244,13 @@ node install-agy.js --remove # 해고(훅 빼기)
 - 출근을 안 하면 이 폴더의 `agy-hook.log`를 보세요: 비어 있으면 훅이 안 불린 것, '연결 실패'면 서버가 꺼진 것, '응답 200'이면 다른 층(작업 폴더)에 출근해 있어요
 - 층 정리 창(⋯)에서 Antigravity 직원 이름도 바꿀 수 있어요
 
+### ✨ Gemini CLI 도 같은 직원으로
+
+`gemini`(Gemini CLI, v0.26+)를 쓰면 위 `node install-agy.js` 가 `~/.gemini/settings.json` 의 `hooks` 에도 `claude-office` 이름의 훅을 넣어요 (다른 설정 · 다른 훅은 그대로, 백업 후).
+- Antigravity 와 **같은 보라 둥둥이 직원**으로 출근해요. 질문 내용, 도구, 답 끝을 따라 움직여요
+- 쓰는 훅: `SessionStart` · `BeforeAgent` · `AfterTool` · `AfterAgent` · `Notification`. 전부 빈 답 `{}` 만 내서 Gemini 동작은 그대로예요 (`BeforeTool` 처럼 막을 수 있는 훅은 안 써요)
+- 확인: `gemini` 안에서 `/hooks panel`
+
 ## 🔁 Mac 켜면 자동으로 열기
 
 매번 `node server.js` 치기 귀찮으면:
