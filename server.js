@@ -97,7 +97,10 @@ function ev(S, live, e) {
     case 'agentDone': delete S.agents[e.id]; break;
     case 'board': S.board = e.items; break;
   }
-  if (live) { S.lastEv = Date.now(); broadcast('ev', Object.assign({ session: S.key, at: Date.now() }, e)); }
+  if (live) {
+    S.lastEv = Date.now(); const msg = Object.assign({ session: S.key, at: Date.now() }, e); broadcast('ev', msg);
+    if (e.k !== 'board') { (S.hist = S.hist || []).push(msg); if (S.hist.length > 80) S.hist.splice(0, S.hist.length - 80); } // 업무 일지: 최근 80개 기억
+  }
 }
 const publicAgent = (a) => ({ id: a.id, type: a.type, desc: a.desc, room: a.room, tool: a.tool, detail: a.detail, tools: a.tools, since: a.since });
 
@@ -868,6 +871,11 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/setup' && req.method === 'POST') return handleSetup(req, res);
+  if (url === '/log') { // 업무 일지 다시 채우기: ?k=세션키,세션키
+    const keys = (new URL(req.url, 'http://x').searchParams.get('k') || '').split(',').slice(0, 8);
+    const list = keys.flatMap(k => (sessions.get(k) || {}).hist || []).sort((a, b) => a.at - b.at).slice(-80);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify(list));
+  }
   if (url === '/open' && req.method === 'POST') return handleOpen(req, res);
   if (url === '/gemini' && req.method === 'POST') return receiveAgy(req, res, (new URL(req.url, 'http://x').searchParams.get('e') || '').slice(0, 30), handleGemini);
   if (url === '/agy' && req.method === 'POST') return receiveAgy(req, res, (new URL(req.url, 'http://x').searchParams.get('e') || '').slice(0, 30));
