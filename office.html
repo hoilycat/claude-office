@@ -142,6 +142,9 @@ button{font:inherit;color:inherit}
 #ground::before{content:"";position:absolute;left:50%;top:-14px;width:46px;height:14px;margin-left:-23px;background:#9aa0c4;border-radius:6px 6px 0 0}
 #unhide{flex:none;margin-top:8px;border:0;background:none;color:var(--sub);font-size:12px;cursor:pointer;padding:6px}
 #unhide:hover{color:var(--ink)}
+#recent{flex:none;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:2px 4px;margin-top:4px;font-size:11.5px;color:var(--sub);padding:4px;white-space:nowrap}
+#recent select{font:inherit;font-size:12px;border:1px solid var(--line,#dfe2ef);border-radius:7px;padding:2px 4px;background:#fff;color:var(--ink)}
+#recent b{flex-basis:100%;text-align:center;font-weight:500;color:var(--sub)}#recent b:empty{display:none}
 /* ── 층 정리 창 ── */
 /* 처음 설정 창 */
 #setupBg{position:fixed;inset:0;background:rgba(38,42,63,.38);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
@@ -333,6 +336,7 @@ body.priv :is(.fl:not(.rf):not(.lobby) b,#tname,#mproj,#msess,.al b,.al p,.bub,.
     <div id="ground"></div>
     <div id="base"></div>
     <button id="unhide" hidden></button>
+    <label id="recent" title="오래 쉰 층은 접어 둬요. 다시 일하면 저절로 나타나요">🗓 <select id="recentSel" aria-label="최근 며칠 안에 일한 층만 보기"><option value="1">오늘</option><option value="3">3일</option><option value="7">7일</option><option value="30">30일</option><option value="0">전부</option></select><span>안에 일한 층만 보기</span><b id="recentN"></b></label>
   </aside>
   <div id="setupBg"><form id="setup" role="dialog" aria-modal="true" aria-labelledby="setupH" autocomplete="off"></form></div>
   <div id="tidyBg"><div id="tidy" role="dialog" aria-modal="true" aria-labelledby="tidyH"></div></div>
@@ -1137,7 +1141,9 @@ const layout = Object.assign({ names: {}, merge: {}, moves: {}, workers: {}, dec
 const saveHidden = () => { try { localStorage.setItem('office.hiddenFloors', JSON.stringify([...hidden])); } catch { } };
 const saveLayout = () => { try { localStorage.setItem('office.layout', JSON.stringify(layout)); } catch { } };
 const rootOf = (k) => { const seen = new Set(); while (layout.merge[k] && !seen.has(k)) { seen.add(k); k = layout.merge[k]; } return k; };
-let RAW = null, ALL = [], hiddenN = 0;
+let RAW = null, ALL = [], hiddenN = 0, staleN = 0;
+let recentDays = +load('office.recentDays', 7); // 0 = 전부 보기
+const isStale = (F) => recentDays > 0 && !F.active && Date.now() - F.mtime > recentDays * 864e5 && F.proj !== rootOf(RAW.self || '') && !F.sessions.some(s => s.key === curKey);
 const homeOf = new Map(); // 세션 → 원래(합치기까지 반영한) 층
 function applySnap() { // 정리 규칙대로 층을 다시 묶고, 숨긴 층을 빼고, 층 번호를 다시 매김
   const orig = new Map(RAW.floors.map(f => [f.proj, f.name])), G = new Map();
@@ -1160,7 +1166,9 @@ function applySnap() { // 정리 규칙대로 층을 다시 묶고, 숨긴 층�
   }).sort((a, b) => a.name.localeCompare(b.name) || a.proj.localeCompare(b.proj));
   hiddenN = ALL.filter(F => hidden.has(F.proj)).length;
   const vis = ALL.filter(F => !hidden.has(F.proj)), base = RAW.self && vis.find(F => F.proj === rootOf(RAW.self)); // 클로드 오피스 폴더는 지하 1층 관리실
-  vis.filter(F => F !== base).forEach((F, i) => F.n = i + 2); if (base) base.n = -1; // 1층은 로비
+  // 오래 쉰 층은 접어 둠: 번호는 위쪽(보이는 층 다음)으로 주고 건물 단면·안내판에서만 뺌. 통계(이달의 직원·출퇴근)엔 그대로 남음
+  const rest = vis.filter(F => F !== base), fresh = rest.filter(F => !isStale(F)), old = rest.filter(F => isStale(F)); staleN = old.length;
+  fresh.forEach((F, i) => { F.n = i + 2; F.fold = false; }); old.forEach((F, i) => { F.n = fresh.length + 2 + i; F.fold = true; }); if (base) { base.n = -1; base.fold = false; } // 1층은 로비
   SNAP = Object.assign({}, RAW, { floors: vis });
   const s = allSessions().find(x => x.key === curKey);
   if (s) curFloorN = s.floor.n; else { curKey = null; curFloorN = null; }
@@ -1190,11 +1198,12 @@ function renderDir() {
   const asks = SNAP.floors.filter(f => floorAlert.get(f.proj) === 'ask').length, errs = SNAP.floors.filter(f => floorAlert.get(f.proj) === 'err').length, waits = waitingList().length;
   const ceo = `<div class="fl ceo ${asks ? 'ask' : errs ? 'err' : ''} ${view === 'ceo' ? 'cur' : ''}" data-ceo tabindex="0" title="대표실 — 직원들이 올린 질문·에러 모아 보기"><span class="no jua">대표</span><b>${esc(SNAP.user || '')} 대표실</b>
     <span class="sub">${asks || errs || waits ? [asks && `🙋 질문 ${asks}`, errs && `⚠ 에러 ${errs}`, waits && `💬 답변 대기 ${waits}`].filter(Boolean).join(' · ') : '결재 대기 없음'}</span></div>`;
-  $('#stack').innerHTML = roofg + ceo + SNAP.floors.filter(f => f.n > 0).reverse().map(card).join('') + lobby;
+  $('#stack').innerHTML = roofg + ceo + SNAP.floors.filter(f => f.n > 0 && !f.fold).reverse().map(card).join('') + lobby;
   if (lobbyOpen) renderLobby(); else if (bossOpen) renderBoss();
   const base = SNAP.floors.filter(f => f.n < 0);
   $('#base').innerHTML = base.map(card).join(''); $('#rail').classList.toggle('hasBase', !!base.length);
   const ub = $('#unhide'); ub.hidden = !hiddenN; ub.textContent = `숨긴 층 ${hiddenN}개 되돌리기`;
+  $('#recentSel').value = String(recentDays); $('#recentN').textContent = staleN ? `쉬는 층 ${staleN}개 접어 둠` : '';
   const f = SNAP.floors.find(x => x.n === curFloorN), s = allSessions().find(x => x.key === curKey);
   $('#tfl').textContent = view === 'ceo' ? '대표' : view === 'lobby' ? '1F' : view === 'roof' ? 'RF' : f ? fno(f.n) : '-';
   $('#tname').textContent = view === 'ceo' ? `${SNAP.user || ''} 대표실` : view === 'lobby' ? '로비' : view === 'roof' ? '옥상정원' : f ? f.name : TITLE;
@@ -1223,6 +1232,7 @@ document.addEventListener('click', (e) => { if (!e.target.closest('#pop') && !e.
 $('#pop').addEventListener('click', (e) => { const ss = e.target.closest('.ss'); if (ss) { setFollow(false); switchTo(ss.dataset.k); closePop(); } });
 $('#pop').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const ss = e.target.closest('.ss'); if (ss) ss.click(); } if (e.key === 'Escape') closePop(); });
 $('#unhide').onclick = () => { hidden.clear(); relayout(); };
+$('#recentSel').onchange = (e) => { recentDays = +e.target.value; try { localStorage.setItem('office.recentDays', JSON.stringify(recentDays)); } catch { } relayout(); };
 $('#rail').addEventListener('click', (ev) => {
   const x = ev.target.closest('.x');
   if (x) { const f = SNAP.floors.find(y => y.n === +x.closest('.fl').dataset.n); if (f) openTidy(f.proj); return; }
@@ -1250,7 +1260,7 @@ function renderLobby() {
     return `<div class="rw ${f.active ? '' : 'idle'}" data-n="${f.n}" tabindex="0"><span class="no jua">${fno(f.n)}</span><b>${esc(f.name)}</b>
       <span class="st ${f.active ? 'on' : ''}">${f.active ? '● 일하는 중' : agoTxt(f.mtime)}</span><span class="what">${who}<span>${st ? esc(doing) : doing}</span></span></div>`;
   };
-  const up = SNAP.floors.filter(f => f.n > 0).reverse(), down = SNAP.floors.filter(f => f.n < 0);
+  const up = SNAP.floors.filter(f => f.n > 0 && !f.fold).reverse(), down = SNAP.floors.filter(f => f.n < 0);
   const tabs = `<div class="tabs"><button data-tab="dir" class="${lobbyTab === 'dir' ? 'on' : ''}">층 안내</button><button data-tab="work" class="${lobbyTab === 'work' ? 'on' : ''}">출퇴근</button><button data-tab="star" class="${lobbyTab === 'star' ? 'on' : ''}">이달의 직원</button><button data-tab="day" class="${lobbyTab === 'day' ? 'on' : ''}">오늘 요약</button></div>`;
   $('#board').innerHTML = `<header><h3 class="jua">로비 안내판</h3>${tabs}<label><input type="checkbox" id="lfol" ${follow ? 'checked' : ''}>자동 따라가기</label></header>
     <div class="list">${lobbyTab === 'day' ? dayReport() : lobbyTab === 'star' ? starBoard() : lobbyTab === 'work' ? workBook([...up, ...down]) : up.map(row).join('') + (down.length ? '<div class="gap"></div>' + down.map(row).join('') : '')}</div>`;
@@ -1979,7 +1989,7 @@ function drawLobbyRoom(t) {
   }
   // 층별 안내판
   faceY(0, 10.0, 13.6, 24, 78, '#3a2f28'); faceY(0, 10.1, 13.5, 26, 76, '#4a3d33');
-  const fl = SNAP ? SNAP.floors.filter(f => f.n > 0).reverse().slice(0, 8) : [];
+  const fl = SNAP ? SNAP.floors.filter(f => f.n > 0 && !f.fold).reverse().slice(0, 8) : [];
   fl.forEach((f, i) => {
     const z = 70 - i * 5.6;
     wallText(`${fno(f.n)} ${String(f.name).slice(0, 12)}`, 10.3, 0, z, 'y', '7px Jua,sans-serif', f.active ? '#8fe3ab' : '#e8d4b0', 'left');
