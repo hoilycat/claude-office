@@ -23,7 +23,8 @@ if (fs.existsSync(FILE)) {
 
 if (remove) delete j[KEY];
 else {
-  const cmd = `node "${HOOK}"`;
+  // Mac 앱(Antigravity)은 터미널과 PATH 가 달라서 'node' 를 못 찾을 수 있음 → 지금 쓰는 node 의 진짜 경로를 박아 둠
+  const cmd = `"${process.execPath}" "${HOOK}"`;
   j[KEY] = {};
   for (const e of EVENTS) {
     const h = { type: 'command', command: `${cmd} ${e}`, timeout: 5 };
@@ -32,5 +33,6 @@ else {
 }
 fs.mkdirSync(path.dirname(FILE), { recursive: true });
 fs.writeFileSync(FILE, JSON.stringify(j, null, 2) + '\n');
+if (!remove) console.log(`   node 경로: ${process.execPath}  (Node 를 새로 깔거나 폴더를 옮기면 이 명령을 다시 실행해 주세요)\n   훅이 불렸는지 확인: ${path.join(__dirname, 'agy-hook.log')}`);
 console.log(remove ? `🧹 Antigravity 훅을 뺐어요 (${FILE})`
   : `✅ Antigravity 직원 채용 완료! (${FILE})\n   Antigravity 를 껐다 켜면 반영돼요. 오피스 서버(node server.js)가 켜져 있어야 출근해요.`);
