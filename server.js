@@ -660,8 +660,17 @@ function agyDetail(a) {
   if (a.TaskName) return snip(a.TaskName, 40);
   return '';
 }
+const agySeen = new Map(); // 같은 신호가 두 곳(공통·CLI 전용 훅 파일)에서 두 번 오면 한 번만 처리
+function agyDup(id, evName, d) {
+  const tc = d.toolCall || {}, now = Date.now();
+  const k = [id, evName, d.stepIdx, d.invocationNum, d.executionNum, tc.name, JSON.stringify(tc.args || {}).slice(0, 300)].join('|');
+  for (const [x, t] of agySeen) if (now - t > 5000) agySeen.delete(x);
+  if (agySeen.has(k)) return true;
+  agySeen.set(k, now); return false;
+}
 function handleAgy(d, evName) {
   const id = String(d.conversationId || d.conversation_id || '').slice(0, 80); if (!id) return;
+  if (agyDup(id, evName, d)) return;
   const S = getSession('agy', id); S.agent = 'agy'; S.main = true;
   const ws = Array.isArray(d.workspacePaths) ? d.workspacePaths[0] : d.workspacePaths;
   const tc = d.toolCall || {}, args = tc.args || {};
