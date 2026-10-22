@@ -146,7 +146,8 @@ button{font:inherit;color:inherit}
 #recent select{font:inherit;font-size:12px;border:1px solid var(--line,#dfe2ef);border-radius:7px;padding:2px 4px;background:#fff;color:var(--ink)}
 #recent b{flex-basis:100%;text-align:center;font-weight:500;color:var(--sub)}#recent b:empty{display:none}
 #group{flex:none;display:flex;align-items:center;justify-content:center;gap:4px;font-size:11.5px;color:var(--sub);padding:2px 4px 6px;white-space:nowrap}
-#group select{font:inherit;font-size:12px;border:1px solid var(--line,#dfe2ef);border-radius:7px;padding:2px 4px;background:#fff;color:var(--ink)}
+#stay{flex:none;display:flex;align-items:center;justify-content:center;gap:4px;font-size:11.5px;color:var(--sub);padding:2px 4px;white-space:nowrap}
+#stay select,#group select{font:inherit;font-size:12px;border:1px solid var(--line,#dfe2ef);border-radius:7px;padding:2px 4px;background:#fff;color:var(--ink)}
 /* ── 층 정리 창 ── */
 /* 처음 설정 창 */
 #setupBg{position:fixed;inset:0;background:rgba(38,42,63,.38);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
@@ -351,6 +352,7 @@ body.priv :is(.fl:not(.rf):not(.lobby) b,#tname,#mproj,#msess,.al b,.al p,.bub,.
     <div id="base"></div>
     <button id="unhide" hidden></button>
     <label id="recent" title="오래 쉰 층은 접어 둬요. 다시 일하면 저절로 나타나요">🗓 <select id="recentSel" aria-label="최근 며칠 안에 일한 층만 보기"><option value="1">오늘</option><option value="3">3일</option><option value="7">7일</option><option value="30">30일</option><option value="0">전부</option></select><span>안에 일한 층만 보기</span><b id="recentN"></b></label>
+    <label id="stay" class="rsel" title="이 시간 안에 일한 세션이 사무실에 같이 출근해요">👥 출근 기준 <select id="staySel" aria-label="출근 기준"><option value="15">15분</option><option value="30">30분</option><option value="60">1시간</option><option value="180">3시간</option></select> 안에 일한 직원</label>
     <label id="group" title="층을 작업 폴더로 나눌지, 직원(Claude · Codex · Antigravity)으로 나눌지">🏢 층 나누기 <select id="groupSel" aria-label="층 나누는 방법"><option value="folder">폴더별</option><option value="agent">직원별</option><option value="all">다같이 한 층</option></select></label>
   </aside>
   <div id="setupBg"><form id="setup" role="dialog" aria-modal="true" aria-labelledby="setupH" autocomplete="off"></form></div>
@@ -987,7 +989,7 @@ function syncCompanion() {
   if (!scene || !SNAP) return;
   const P = primary(); if (!P) return;
   const f = SNAP.floors.find(x => x.sessions.some(s => s.key === scene.primary)); if (!f) return;
-  const others = f.sessions.filter(s => s.key !== scene.primary && s.state).sort((a, b) => b.mtime - a.mtime).slice(0, MAX_WORKERS - 1);
+  const others = f.sessions.filter(s => s.key !== scene.primary && s.state && Date.now() - s.mtime < stayMin * 60e3).sort((a, b) => b.mtime - a.mtime).slice(0, MAX_WORKERS - 1);
   const keep = new Set(others.map(s => s.key));
   for (const [k, W] of scene.workers) if (k !== scene.primary && !keep.has(k)) { removeWorker(W); scene.workers.delete(k); }
   const home = {}; for (const W of scene.workers.values()) if (!W.seat) home[W.kind] = W.key;
@@ -1254,6 +1256,7 @@ const saveLayout = () => { try { localStorage.setItem('office.layout', JSON.stri
 const rootOf = (k) => { const seen = new Set(); while (layout.merge[k] && !seen.has(k)) { seen.add(k); k = layout.merge[k]; } return k; };
 let RAW = null, ALL = [], hiddenN = 0, staleN = 0;
 let recentDays = +load('office.recentDays', 7); // 0 = 전부 보기
+let stayMin = [15, 30, 60, 180].includes(+load('office.stayMin', 60)) ? +load('office.stayMin', 60) : 60; // 출근 기준 (분)
 let groupBy = ['agent', 'all'].includes(load('office.groupBy', 'folder')) ? load('office.groupBy', 'folder') : 'folder'; // 층 = 작업 폴더 | 직원 종류 | 전부 한 층
 const AGENT_ORDER = ['claude', 'codex', 'agy'];
 const isStale = (F) => recentDays > 0 && !F.active && Date.now() - F.mtime > recentDays * 864e5 && F.proj !== rootOf(RAW.self || '') && !F.sessions.some(s => s.key === curKey);
@@ -1320,7 +1323,7 @@ function renderDir() {
   const base = SNAP.floors.filter(f => f.n < 0);
   $('#base').innerHTML = base.map(card).join(''); $('#rail').classList.toggle('hasBase', !!base.length);
   const ub = $('#unhide'); ub.hidden = !hiddenN; ub.textContent = `숨긴 층 ${hiddenN}개 되돌리기`;
-  $('#groupSel').value = groupBy; $('#recentSel').value = String(recentDays); $('#recentN').textContent = staleN ? `쉬는 층 ${staleN}개 접어 둠` : '';
+  $('#staySel').value = String(stayMin); $('#groupSel').value = groupBy; $('#recentSel').value = String(recentDays); $('#recentN').textContent = staleN ? `쉬는 층 ${staleN}개 접어 둠` : '';
   const f = SNAP.floors.find(x => x.n === curFloorN), s = allSessions().find(x => x.key === curKey);
   $('#tfl').textContent = view === 'ceo' ? '대표' : view === 'lobby' ? '1F' : view === 'roof' ? 'RF' : f ? fno(f.n) : '-';
   $('#tname').textContent = view === 'ceo' ? `${SNAP.user || ''} 대표실` : view === 'lobby' ? '로비' : view === 'roof' ? '옥상정원' : f ? f.name : TITLE;
@@ -1349,6 +1352,7 @@ document.addEventListener('click', (e) => { if (!e.target.closest('#pop') && !e.
 $('#pop').addEventListener('click', (e) => { const ss = e.target.closest('.ss'); if (ss) { setFollow(false); switchTo(ss.dataset.k); closePop(); } });
 $('#pop').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const ss = e.target.closest('.ss'); if (ss) ss.click(); } if (e.key === 'Escape') closePop(); });
 $('#unhide').onclick = () => { hidden.clear(); relayout(); };
+$('#staySel').onchange = (e) => { stayMin = +e.target.value; try { localStorage.setItem('office.stayMin', JSON.stringify(stayMin)); } catch { } syncCompanion(); };
 $('#groupSel').onchange = (e) => { groupBy = e.target.value; try { localStorage.setItem('office.groupBy', JSON.stringify(groupBy)); } catch { } relayout(); };
 $('#recentSel').onchange = (e) => { recentDays = +e.target.value; try { localStorage.setItem('office.recentDays', JSON.stringify(recentDays)); } catch { } relayout(); };
 $('#rail').addEventListener('click', (ev) => {

@@ -13,6 +13,7 @@ const ROOT = process.env.CLAUDE_PROJECTS_DIR || path.join(os.homedir(), '.claude
 const TAIL_MS = 250;          // 활성 파일을 따라 읽는 간격
 const SCAN_MS = 2000;         // 새 프로젝트·세션을 찾는 간격
 const HOT_MS = 15 * 60e3;     // 이 시간 안에 바뀐 파일만 실시간으로 따라 읽음
+const STATE_MS = 3 * 3600e3;  // 이 시간 안에 일한 세션은 상태를 보냄 (화면의 '출근 기준'이 이 안에서 고름)
 const ACTIVE_MS = 90e3;       // 이 시간 안에 움직인 세션 = 불 켜진 매장
 const BOOT_BYTES = 256 * 1024;
 const CODEX_ON = !process.env.NO_CODEX;
@@ -842,7 +843,7 @@ function snapshot() {
         sessions: list.slice(0, 40).map(S => ({
           key: S.key, sid: S.sid, agent: S.agent, work: workOf(S), month: monthMin(S), day: dayOf(S), waiting: waitOf(S), cwd: S.cwd, tools: S.tools, started: S.started, mtime: S.mtime, active: now - S.mtime < ACTIVE_MS,
           label: S.summary || codexTitles.get(S.sid) || S.firstPrompt || new Date(S.mtime).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-          state: now - S.mtime < HOT_MS ? {
+          state: now - S.mtime < STATE_MS ? {
             room: S.room, tool: S.tool, detail: S.detail, mood: S.mood, bubble: S.bubble,
             board: S.board, agents: Object.values(S.agents).map(publicAgent), idle: now - S.mtime > 25e3,
           } : null,
