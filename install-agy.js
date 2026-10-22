@@ -27,10 +27,11 @@ function apply(FILE) {
   else {
     // Mac 앱(Antigravity)은 터미널과 PATH 가 달라서 'node' 를 못 찾을 수 있음 → 지금 쓰는 node 의 진짜 경로를 박아 둠
     const cmd = `"${process.execPath}" "${HOOK}"`;
-    j[KEY] = {};
+    // 공식 문서 형식: 도구 훅(PostToolUse)은 { matcher, hooks: [명령] }, 나머지 훅은 [명령] 을 바로 적음
+    j[KEY] = { enabled: true };
     for (const e of EVENTS) {
       const h = { type: 'command', command: `${cmd} ${e}`, timeout: 5 };
-      j[KEY][e] = [e === 'PostToolUse' ? { matcher: '.*', hooks: [h] } : { hooks: [h] }];
+      j[KEY][e] = e === 'PostToolUse' ? [{ matcher: '.*', hooks: [h] }] : [h];
     }
   }
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
@@ -40,4 +41,4 @@ function apply(FILE) {
 const results = FILES.map(f => [f, apply(f)]);
 if (!remove) console.log(`   node 경로: ${process.execPath}  (Node 를 새로 깔거나 폴더를 옮기면 이 명령을 다시 실행해 주세요)\n   훅이 불렸는지 확인: ${path.join(__dirname, 'agy-hook.log')}`);
 for (const [f, r] of results) console.log(r === null ? `   (없음) ${f}` : r ? `   ${remove ? '🧹 뺐어요' : '✅ 넣었어요'}: ${f}` : `   ❌ 못 고쳤어요: ${f}`);
-if (!remove) console.log('✅ Antigravity 직원 채용 완료! Antigravity(앱·agy)를 껐다 켜면 반영돼요. 오피스 서버가 켜져 있어야 출근해요.');
+if (!remove) console.log('✅ Antigravity 직원 채용 완료! Antigravity(앱·agy)를 껐다 켜면 반영돼요. 오피스 서버가 켜져 있어야 출근해요.\n   확인: 앱은 Settings > Customizations > Hooks, agy 는 /hooks 에서 claude-office 가 보이면 성공');
