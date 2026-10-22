@@ -1,5 +1,8 @@
 # 🏢 클로드 오피스
 
+> 🛸 **이 저장소는 [toplainsoft/claude-office](https://github.com/toplainsoft/claude-office)(MIT © 2026 TOPLAIN SOFT)를 바탕으로 고친 버전이에요.**
+> 원작의 사무실·캐릭터·화면은 전부 TOPLAIN SOFT 작품이고, 여기서는 **Antigravity 직원**(훅 연결, 보라색 둥둥이 캐릭터)을 더했어요. 멋진 원작에 감사드려요!
+
 **Claude Code**(와 Codex · Antigravity)가 하는 일을 브라우저 속 작은 사무실 캐릭터로 보여주는 도구예요.
 Claude가 파일을 읽으면 자료실로, 코드를 고치면 개발실로, 명령을 실행하면 서버실로 걸어가요. 질문이 있으면 엘리베이터를 타고 대표실(나)에게 올라와요.
 
