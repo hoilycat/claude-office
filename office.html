@@ -772,7 +772,7 @@ function drawPerson(a, t) {
   if (a.hopUntil > performance.now()) ctx.translate(0, -Math.abs(Math.sin(t * 9 + a.seed)) * 10); // 월급 받고 방방
   if (a.slump) { ctx.translate(8, 16); ctx.rotate(1.0); } // 월급 주고 책상에 털썩 엎드린 대표님
   if (!a.avatar && a.x < 1.2) ctx.globalAlpha = Math.max(0, Math.min(1, elevOpen * 1.4, (a.x - .2) * 1.6 + elevOpen));
-  ellipse(0, 0, 10, 4.2, 'rgba(30,35,60,.16)');
+  if (!L.float) ellipse(0, 0, 10, 4.2, 'rgba(30,35,60,.16)'); // 떠 있는 직원은 바닥 그림자 하나만 (위에서 따로 그림)
   const sw = walk ? Math.sin(ph) * 2.4 : 0;
   rrect(-6, -12 - Math.max(0, sw), 5, 11, 2.5, '#3d4257'); rrect(1, -12 - Math.max(0, -sw), 5, 11, 2.5, '#3d4257');
   const by = -28 - bob;
