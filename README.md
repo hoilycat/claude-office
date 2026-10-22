@@ -234,6 +234,22 @@ node install-agy.js --remove # 해고(훅 빼기)
 - 서버가 `4777` 이 아닌 포트면 훅에도 `CLAUDE_OFFICE_PORT` 를 맞춰 주세요
 - 층 정리 창(⋯)에서 Antigravity 직원 이름도 바꿀 수 있어요
 
+## 🔁 Mac 켜면 자동으로 열기
+
+매번 `node server.js` 치기 귀찮으면:
+
+```bash
+node install-autostart.js          # 켜기 (지금 바로 켜지고, 다음부터는 로그인할 때마다 자동)
+node install-autostart.js --remove # 끄기
+```
+
+- Mac 의 launchd 에 `com.claude-office.server` 하나만 등록해요 (`~/Library/LaunchAgents`). 브라우저는 자동으로 안 열어요 — 보고 싶을 때 `http://localhost:4777`
+- 서버가 혹시 죽으면 30초 뒤 다시 켜져요. 낮은 우선순위로 돌아서 다른 일을 방해하지 않아요
+- 기록은 `~/Library/Logs/claude-office.log`
+- ⚠ 폴더가 **바탕화면 · 문서 · 다운로드** 안에 있으면 Mac 보안 때문에 자동 실행된 서버가 파일을 못 읽을 수 있어요. 홈 바로 아래(예: `~/claude-office`)에 두는 걸 추천해요
+- 폴더를 옮겼거나 Node 를 새로 깔았으면 이 명령을 한 번 더 실행해 주세요 (Node 경로를 기억해 둬서)
+- 자동 실행 중에 `node server.js` 를 또 치면 "포트가 이미 쓰이고 있어요"가 나와요. 이미 켜져 있다는 뜻이니 브라우저만 열면 돼요
+
 ## ⚙️ 고급 설정
 
 ```bash
