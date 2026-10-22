@@ -383,7 +383,9 @@ const kindOf = (s) => s && s.agent === 'codex' ? 'codex' : s && s.agent === 'agy
 const whoCls = (s) => ({ codex: 'cx', agy: 'ag' })[kindOf(s)] || '';
 // 층마다 붙인 직원 이름 (층 정리 창에서 정함). 없으면 Claude / Codex
 const curProj = () => { const f = SNAP && SNAP.floors.find(x => x.n === curFloorN); return f ? f.proj : ''; };
-const staff = (kind, proj = curProj()) => ((layout.workers[proj] || {})[kind]) || BRAND[kind];
+// 이름 고르는 순서: 이 층 이름 → 모든 층 기본 이름(layout.workers['*']) → 원래 이름
+const baseName = (kind) => ((layout.workers['*'] || {})[kind]) || BRAND[kind];
+const staff = (kind, proj = curProj()) => ((layout.workers[proj] || {})[kind]) || baseName(kind);
 const nameActor = (W) => { const n = staff(W.kind); W.actor.setName(n, n !== BRAND[W.kind] ? BRAND[W.kind] : ''); };
 const AG_OFF = [0, 1.1, -1.1, 2.1, -2.1, .55];
 const PEOPLE = {
@@ -1374,7 +1376,8 @@ function renderTidy() {
   $('#tidy').innerHTML = `<header><span class="no jua">${F.n && !hidden.has(F.proj) ? fno(F.n) : '숨김'}</span><h3 class="jua" id="tidyH">층 정리</h3><button data-a="close" aria-label="닫기">×</button></header>
   <div class="bd">
     <div class="row"><span class="lab">층 이름</span><input id="tName" value="${esc(layout.names[F.proj] || '')}" placeholder="${esc(F.orig || '새 층')}" maxlength="40"><button class="btn" data-a="name">바꾸기</button></div>
-    <div class="row"><span class="lab">직원 이름</span><input id="tClaude" value="${esc((layout.workers[F.proj] || {}).claude || '')}" placeholder="Claude" maxlength="12" aria-label="이 층 Claude 이름"><input id="tCodex" value="${esc((layout.workers[F.proj] || {}).codex || '')}" placeholder="Codex" maxlength="12" aria-label="이 층 Codex 이름"><input id="tAgy" value="${esc((layout.workers[F.proj] || {}).agy || '')}" placeholder="Antigravity" maxlength="12" aria-label="이 층 Antigravity 이름"><button class="btn" data-a="staff">정하기</button></div>
+    <div class="row"><span class="lab">직원 이름</span><input id="tClaude" value="${esc((layout.workers[F.proj] || {}).claude || '')}" placeholder="${esc(baseName('claude'))}" maxlength="12" aria-label="이 층 Claude 이름"><input id="tCodex" value="${esc((layout.workers[F.proj] || {}).codex || '')}" placeholder="${esc(baseName('codex'))}" maxlength="12" aria-label="이 층 Codex 이름"><input id="tAgy" value="${esc((layout.workers[F.proj] || {}).agy || '')}" placeholder="${esc(baseName('agy'))}" maxlength="12" aria-label="이 층 Antigravity 이름"><button class="btn" data-a="staff" title="이 층에만">이 층만</button><button class="btn" data-a="staffAll" title="모든 층 직원 이름을 한 번에">모든 층에</button></div>
+    <p class="note" style="margin:-4px 0 6px">빈칸으로 두고 <b>모든 층에</b>를 누르면 원래 이름(Claude · Codex · Antigravity)으로 돌아가요.</p>
     <div class="row"><span class="lab">꾸미기</span><select id="tTheme" style="flex:1">${Object.entries(THEMES).map(([k, v]) => `<option value="${k}" ${(layout.deco[F.proj] || {}).theme === k ? 'selected' : ''}>${v.name}</option>`).join('')}</select>
       ${PROPS.map(([k, lab]) => `<label class="chip" style="cursor:pointer;padding-right:9px"><input type="checkbox" data-prop="${k}" ${(layout.deco[F.proj] || {})[k] ? 'checked' : ''}>${lab}</label>`).join('')}</div>
     <div class="row"><span class="lab">폴더</span><span class="path">${esc(cwd ? cwd.replace(/^\/(Users|home)\/[^/]+/, '~') : F.proj.startsWith('new:') ? '직접 만든 층' : F.proj)}</span></div>
@@ -1398,6 +1401,15 @@ $('#tidyBg').addEventListener('click', (e) => {
     const c = $('#tClaude').value.trim(), x = $('#tCodex').value.trim(), g = $('#tAgy').value.trim();
     if (c || x || g) layout.workers[F.proj] = Object.assign({}, c && { claude: c }, x && { codex: x }, g && { agy: g }); else delete layout.workers[F.proj];
     relayout(); if (scene) { scene.workers.forEach(nameActor); renderCrew(); }
+  }
+  if (a === 'staffAll') {
+    const v = { claude: $('#tClaude').value.trim(), codex: $('#tCodex').value.trim(), agy: $('#tAgy').value.trim() };
+    const all = {}; for (const k in v) if (v[k]) all[k] = v[k];
+    if (Object.keys(all).length) layout.workers['*'] = all; else delete layout.workers['*'];
+    for (const p of Object.keys(layout.workers)) if (p !== '*') delete layout.workers[p]; // 층마다 따로 붙인 이름은 지우고 통일
+    relayout(); if (scene) { scene.workers.forEach(nameActor); renderCrew(); }
+    $('#tClaude').value = $('#tCodex').value = $('#tAgy').value = '';
+    ['claude', 'codex', 'agy'].forEach(k => $('#t' + { claude: 'Claude', codex: 'Codex', agy: 'Agy' }[k]).placeholder = baseName(k));
   }
   if (a === 'split') { delete layout.merge[b.dataset.p]; relayout(); }
   if (a === 'merge') { const to = $('#tMerge').value; if (!to) return; layout.merge[F.proj] = to; tidyProj = rootOf(to); relayout(); }
